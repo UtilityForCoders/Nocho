@@ -24,7 +24,8 @@ use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_WEIGHT_REGULAR,
     DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_HIT_TEST_METRICS, DWRITE_LINE_SPACING_METHOD_UNIFORM,
     DWRITE_PARAGRAPH_ALIGNMENT_CENTER, DWRITE_TEXT_ALIGNMENT_CENTER, DWRITE_TEXT_METRICS,
-    DWRITE_WORD_WRAPPING_NO_WRAP, DWRITE_WORD_WRAPPING_WRAP,
+    DWRITE_TRIMMING, DWRITE_TRIMMING_GRANULARITY_CHARACTER, DWRITE_WORD_WRAPPING_NO_WRAP,
+    DWRITE_WORD_WRAPPING_WRAP,
 };
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Imaging::{
@@ -42,22 +43,24 @@ const SCROLL_SPEED: f32 = 30.0;
 const SCROLL_PAUSE: f32 = 1.5;
 
 /// Tamaño lógico de letra del verso que se canta (negrita) y de los demás.
-const LYRIC_BOLD_SIZE: f32 = 15.5;
-const LYRIC_SIZE: f32 = 12.5;
+const LYRIC_BOLD_SIZE: f32 = 13.5;
+const LYRIC_SIZE: f32 = 11.5;
 const LYRIC_LINE_SPACING: f32 = 1.25;
 /// Lugar de cada verso del carrusel según su distancia al que se canta (de -2 a 3): borde
 /// superior respecto del centro de la columna, opacidad y tamaño de letra, en píxeles lógicos.
 /// Entre dos lugares se interpola: así los versos suben, crecen y se aclaran de forma continua.
+/// Se ven solo el anterior, el que se canta y el siguiente: la columna es baja y con más
+/// versos quedaban amontonados.
 const LYRIC_SLOTS: [(f32, f32, f32); 6] = [
     // Sale por arriba.
-    (-64.0, 0.0, 11.0),
-    (-44.0, 0.40, LYRIC_SIZE),
+    (-56.0, 0.0, 10.0),
+    (-36.0, 0.40, LYRIC_SIZE),
     // El que se canta: puede ocupar dos renglones.
-    (-20.0, 1.0, LYRIC_BOLD_SIZE),
-    (24.0, 0.35, LYRIC_SIZE),
-    (45.0, 0.20, 11.0),
+    (-17.0, 1.0, LYRIC_BOLD_SIZE),
+    (21.0, 0.35, LYRIC_SIZE),
     // Entra por abajo.
-    (62.0, 0.0, 10.0),
+    (40.0, 0.0, 10.5),
+    (56.0, 0.0, 10.0),
 ];
 /// Versos maquetados que se guardan: los seis del carrusel en sus dos formatos, más el aviso.
 const LYRIC_CACHE: usize = 14;
@@ -820,12 +823,22 @@ fn make_carousel_format(
     };
     let format = make_format_wrapped(dwrite, weight, size, bold)?;
     unsafe {
-        // La letra va centrada bajo los controles.
+        // La letra va centrada en su columna.
         format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
         format.SetLineSpacing(
             DWRITE_LINE_SPACING_METHOD_UNIFORM,
             size * LYRIC_LINE_SPACING,
             size,
+        )?;
+        // Un verso que no cabe termina en "…" en vez de cortarse por los dos lados.
+        let sign = dwrite.CreateEllipsisTrimmingSign(&format)?;
+        format.SetTrimming(
+            &DWRITE_TRIMMING {
+                granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER,
+                delimiter: 0,
+                delimiterCount: 0,
+            },
+            &sign,
         )?;
     }
     Ok(format)
@@ -1139,7 +1152,7 @@ mod tests {
         let (top, alpha, size) = lyric_slot(0.5).unwrap();
         assert!((top - 2.0).abs() < 1e-4);
         assert!((alpha - 0.675).abs() < 1e-4);
-        assert!((size - 14.0).abs() < 1e-4);
+        assert!((size - (LYRIC_BOLD_SIZE + LYRIC_SIZE) / 2.0).abs() < 1e-4);
         // Fuera de la columna no se dibuja.
         assert_eq!(lyric_slot(-2.5), None);
         assert_eq!(lyric_slot(5.5), None);
