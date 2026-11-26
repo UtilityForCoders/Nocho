@@ -15,7 +15,7 @@ use tiny_skia::{
 const RESTING: (f32, f32, f32) = (88.0, 3.0, 1.5);
 
 /// Expandida compacta (sin letra): tarjeta flotante con el reproductor.
-pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 156.0, 24.0);
+pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 128.0, 24.0);
 
 /// Ancho lógico que suma la letra sincronizada, en una columna a la derecha del reproductor.
 const LYRICS_EXTRA: f32 = 260.0;
@@ -49,12 +49,12 @@ pub const EXPANDED_CONTENT_START: f32 = 0.45;
 /// Medidas del panel izquierdo de reproducción (píxeles lógicos).
 const COVER_PAD_X: f32 = 20.0;
 /// Margen superior lógico de la carátula dentro del reproductor.
-const COVER_PAD_TOP: f32 = 16.0;
+const COVER_PAD_TOP: f32 = 12.0;
 /// Lado lógico de la carátula expandida.
-const COVER_SIZE: f32 = 52.0;
-const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 20.0;
+const COVER_SIZE: f32 = 44.0;
+const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 16.0;
 /// Centro vertical lógico de la fila de controles, centrada bajo la barra de progreso.
-pub const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
+pub const BUTTONS_Y: f32 = PROGRESS_Y + 30.0;
 /// Borde izquierdo lógico de las barras de audio, en la fila del título.
 const BARS_X: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0;
 /// Radio lógico de las esquinas de la carátula.
@@ -71,7 +71,9 @@ const PROGRESS_HIT: f32 = 8.0;
 const OVERSHOOT: f32 = 1.08;
 
 /// Radio lógico de la zona de clic (y del resaltado) de los botones.
-const BUTTON_RADIUS: f32 = 15.0;
+const BUTTON_RADIUS: f32 = 14.0;
+/// Radio lógico del círculo (y de la zona de clic) del botón de reproducir.
+const PLAY_RADIUS: f32 = 17.0;
 /// Distancia lógica del centro a los botones de aleatorio y repetir: repetir queda entre
 /// "siguiente" y el botón de la letra, sin que se toquen sus zonas de clic.
 const MODE_GAP: f32 = 89.0;
@@ -745,7 +747,7 @@ pub fn hit_test(
     button_centers(&g, scale, lyrics_available, modes)
         .find(|&(button, bx, by)| {
             let r = match button {
-                Button::PlayPause => 19.0,
+                Button::PlayPause => PLAY_RADIUS,
                 Button::Shuffle | Button::Repeat => MODE_RADIUS,
                 _ => BUTTON_RADIUS,
             } * scale;
@@ -1570,7 +1572,7 @@ const BAR_SPEEDS: [(f32, f32); 4] = [(7.1, 3.3), (9.3, 4.7), (6.2, 5.9), (8.4, 2
 /// Barras de audio junto al título en el reproductor. En pausa quedan quietas y bajas.
 fn draw_bars(pixmap: &mut Pixmap, left: f32, cy: f32, s: f32, c: &Controls, t: f32, alpha: f32) {
     let (bar_w, gap) = (3.0 * s, 2.5 * s);
-    let (min_h, max_h) = (3.0 * s, 22.0 * s);
+    let (min_h, max_h) = (3.0 * s, 20.0 * s);
 
     let mut paint = Paint {
         anti_alias: true,
@@ -1617,7 +1619,7 @@ fn draw_button(
     if button == Button::PlayPause {
         let [r, g, b] = color.light();
         paint.set_color_rgba8(r, g, b, (alpha * if hovered { 54.0 } else { 34.0 }) as u8);
-        fill_circle(pixmap, &paint, cx, cy, 19.0 * s);
+        fill_circle(pixmap, &paint, cx, cy, PLAY_RADIUS * s);
     } else if hovered {
         let radius = match button {
             Button::Shuffle | Button::Repeat => MODE_RADIUS,
