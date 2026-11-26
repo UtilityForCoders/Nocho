@@ -44,14 +44,19 @@ const BACK_W: f32 = 34.0;
 /// Línea del nivel de volumen, pegada al borde superior de la isla.
 const VOLUME_Y: f32 = 6.0;
 
-const DEVICE_Y: f32 = 14.0;
+/// Compartir en dos filas, para ocupar poco alto: arriba volver, el destino y la recepción;
+/// abajo elegir archivos, enviar el portapapeles y los mensajes recibidos.
+const DEVICE_Y: f32 = 12.0;
 const DEVICE_H: f32 = 34.0;
-const CARD_Y: f32 = DEVICE_Y + DEVICE_H + 8.0;
-const CARD_H: f32 = 62.0;
-const ROW_Y: f32 = CARD_Y + CARD_H + 8.0;
-const ROW_H: f32 = 32.0;
-const STATUS_Y: f32 = ROW_Y + ROW_H + 8.0;
-pub const SHARE_HEIGHT: f32 = STATUS_Y + 24.0;
+const CARD_Y: f32 = DEVICE_Y + DEVICE_H + 6.0;
+const CARD_H: f32 = 44.0;
+pub const SHARE_HEIGHT: f32 = CARD_Y + CARD_H + 12.0;
+/// Separación lógica entre los elementos de una fila.
+const GAP: f32 = 6.0;
+/// Ancho lógico del interruptor de recepción, al final de la primera fila.
+const RECEIVING_W: f32 = 160.0;
+/// Ancho lógico de cada tarjeta de envío; los mensajes recibidos ocupan el resto de la fila.
+const CARD_W: f32 = 150.0;
 
 /// Rectángulo lógico del botón que lleva a `target`: el de compartir se ve en la música y el
 /// de la música en Compartir. `height` = alto lógico de la isla: sin nada sonando la isla es
@@ -91,24 +96,31 @@ fn regions(width: f32, height: f32, page: Page) -> Vec<(Hit, [f32; 4])> {
     };
     let mut regions = vec![(Hit::Tab(target), page_button(target, height))];
     if page == Page::Share {
-        let inner = width - 2.0 * PAD;
-        let half = (inner - 8.0) / 2.0;
-        let right = PAD + half + 8.0;
-        let device_x = PAD + BACK_W + 6.0;
+        let right = width - PAD;
+        let device_x = PAD + BACK_W + GAP;
+        let receiving_x = right - RECEIVING_W;
+        let clipboard_x = PAD + CARD_W + GAP;
+        let inbox_x = clipboard_x + CARD_W + GAP;
         regions.extend([
             (
                 Hit::Share(ShareAction::Device),
-                [device_x, DEVICE_Y, PAD + inner - device_x, DEVICE_H],
+                [device_x, DEVICE_Y, receiving_x - GAP - device_x, DEVICE_H],
             ),
-            (Hit::Share(ShareAction::Files), [PAD, CARD_Y, half, CARD_H]),
-            (
-                Hit::Share(ShareAction::Clipboard),
-                [right, CARD_Y, half, CARD_H],
-            ),
-            (Hit::Share(ShareAction::Inbox), [PAD, ROW_Y, half, ROW_H]),
             (
                 Hit::Share(ShareAction::Receiving),
-                [right, ROW_Y, half, ROW_H],
+                [receiving_x, DEVICE_Y, RECEIVING_W, DEVICE_H],
+            ),
+            (
+                Hit::Share(ShareAction::Files),
+                [PAD, CARD_Y, CARD_W, CARD_H],
+            ),
+            (
+                Hit::Share(ShareAction::Clipboard),
+                [clipboard_x, CARD_Y, CARD_W, CARD_H],
+            ),
+            (
+                Hit::Share(ShareAction::Inbox),
+                [inbox_x, CARD_Y, right - inbox_x, CARD_H],
             ),
         ]);
     }
@@ -314,16 +326,16 @@ pub fn draw(
                     14.0,
                 );
                 canvas.outline(if primary { accent } else { WHITE }, border, rect, 14.0);
-                let icon_box = [x + 12.0, y + (h - 34.0) / 2.0, 34.0, 34.0];
-                canvas.fill(if primary { accent } else { WHITE }, 46.0, icon_box, 10.0);
-                canvas.outline(WHITE, 30.0, icon_box, 10.0);
+                let icon_box = [x + 8.0, y + (h - 30.0) / 2.0, 30.0, 30.0];
+                canvas.fill(if primary { accent } else { WHITE }, 46.0, icon_box, 9.0);
+                canvas.outline(WHITE, 30.0, icon_box, 9.0);
                 let (icon, first, second) = match action {
                     ShareAction::Files => (NoticeIcon::Usb, "Elegir", "archivos"),
                     _ => (NoticeIcon::Keyboard, "Enviar", "portapapeles"),
                 };
-                canvas.icon(icon, WHITE, x + 29.0, y + h / 2.0, 0.72);
-                let text_x = x + 54.0;
-                let text_w = w - 58.0;
+                canvas.icon(icon, WHITE, x + 23.0, y + h / 2.0, 0.66);
+                let text_x = x + 46.0;
+                let text_w = w - 50.0;
                 labels.push(canvas.label(
                     first.to_string(),
                     [text_x, y + h / 2.0 - 18.0, text_w, 18.0],
@@ -392,20 +404,6 @@ pub fn draw(
             }
             _ => {}
         }
-    }
-    if page == Page::Share {
-        let text = if state.receiving {
-            "Tus equipos vinculados pueden enviarte archivos"
-        } else {
-            "Recepción pausada: no se aceptan envíos"
-        };
-        labels.push(canvas.label(
-            text.to_string(),
-            [PAD + 4.0, STATUS_Y, width - 2.0 * PAD - 8.0, 16.0],
-            0.55,
-            false,
-            true,
-        ));
     }
     labels
 }
