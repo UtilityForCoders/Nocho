@@ -3,8 +3,9 @@
 //! La isla es un cuadro flotante con las cuatro esquinas redondeadas, separada del borde superior
 //! de la pantalla por `TOP_GAP` (sin tocar el techo).
 //! En reposo queda una línea superior; al abrirse muestra directamente el reproductor.
-//! Expandida muestra una tarjeta completa flotante, sin cabecera: reproductor con carátula,
-//! tiempos y controles centrados, y debajo la letra sincronizada si está activa.
+//! Expandida muestra una franja baja flotante, sin cabecera: la carátula a la izquierda, el título
+//! con los controles a su derecha, debajo los tiempos y la barra de progreso, y a la derecha la
+//! letra sincronizada si está activa.
 
 use tiny_skia::{
     FillRule, FilterQuality, Paint, Path, PathBuilder, Pattern, Pixmap, SpreadMode, Transform,
@@ -14,8 +15,8 @@ use tiny_skia::{
 /// Línea desde la que empieza la animación de apertura.
 const RESTING: (f32, f32, f32) = (88.0, 3.0, 1.5);
 
-/// Expandida compacta (sin letra): tarjeta flotante con el reproductor.
-pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 128.0, 24.0);
+/// Expandida compacta (sin letra): franja flotante con el reproductor, lo más baja posible.
+pub const EXPANDED_COMPACT: (f32, f32, f32) = (500.0, 70.0, 24.0);
 
 /// Ancho lógico que suma la letra sincronizada, en una columna a la derecha del reproductor.
 const LYRICS_EXTRA: f32 = 260.0;
@@ -47,20 +48,29 @@ const TOP_GAP: f32 = 8.0;
 pub const EXPANDED_CONTENT_START: f32 = 0.45;
 
 /// Medidas del panel izquierdo de reproducción (píxeles lógicos).
-const COVER_PAD_X: f32 = 20.0;
+const COVER_PAD_X: f32 = 14.0;
 /// Margen superior lógico de la carátula dentro del reproductor.
 const COVER_PAD_TOP: f32 = 12.0;
-/// Lado lógico de la carátula expandida.
-const COVER_SIZE: f32 = 44.0;
-const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 16.0;
-/// Centro vertical lógico de la fila de controles, centrada bajo la barra de progreso.
-pub const BUTTONS_Y: f32 = PROGRESS_Y + 30.0;
-/// Borde izquierdo lógico de las barras de audio, en la fila del título.
-const BARS_X: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0;
+/// Lado lógico de la carátula expandida: ocupa casi todo el alto de la franja.
+const COVER_SIZE: f32 = 46.0;
+/// Centro vertical lógico del título y el artista.
+const TEXT_CY: f32 = 26.0;
+/// Centro vertical lógico de la fila de tiempos y barra de progreso, bajo el título.
+const PROGRESS_Y: f32 = 51.0;
+/// Centro vertical lógico de los controles, en la fila del título y a su derecha.
+pub const BUTTONS_Y: f32 = TEXT_CY;
+/// Borde derecho lógico del reproductor (la letra va a su derecha).
+const PLAYER_RIGHT: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X;
+/// Borde izquierdo lógico de las barras de audio, al final de la fila de progreso.
+const BARS_X: f32 = PLAYER_RIGHT - 20.0;
+/// Borde izquierdo lógico del tiempo restante, antes de las barras de audio.
+const REMAINING_X: f32 = BARS_X - 48.0;
+/// Centro horizontal lógico del botón de compartir, a la izquierda de los controles.
+pub const SHARE_CX: f32 = PLAYER_RIGHT - 204.0;
 /// Radio lógico de las esquinas de la carátula.
 const COVER_RADIUS: f32 = 10.0;
-/// Ancho lógico del reproductor (la letra va a su derecha).
-const PLAYER_W: f32 = EXPANDED_COMPACT.0 - 2.0 * COVER_PAD_X;
+/// Borde izquierdo lógico de la columna del título y de los tiempos, a la derecha de la carátula.
+const TEXT_X: f32 = COVER_PAD_X + COVER_SIZE + 12.0;
 
 /// Barra de progreso: grosor (normal y con mouse encima) y zona de clic.
 const PROGRESS_THICK: (f32, f32) = (3.2, 5.0);
@@ -76,9 +86,6 @@ const BUTTON_RADIUS: f32 = 14.0;
 const ICON_SCALE: f32 = 0.86;
 /// Radio lógico del círculo (y de la zona de clic) del botón de reproducir.
 const PLAY_RADIUS: f32 = 17.0;
-/// Distancia lógica del centro a los botones de aleatorio y repetir: repetir queda entre
-/// "siguiente" y el botón de la letra, sin que se toquen sus zonas de clic.
-const MODE_GAP: f32 = 89.0;
 /// Radio lógico de la zona de clic de aleatorio y repetir, más chica por la cercanía.
 const MODE_RADIUS: f32 = 13.0;
 
@@ -207,7 +214,7 @@ fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool, shape: Sh
             EMPTY_MUSIC_HEIGHT / 2.0,
         )
     } else {
-        (BARS_X - 18.0, COVER_PAD_TOP + COVER_SIZE / 2.0)
+        (SHARE_CX - 29.0, TEXT_CY)
     };
     // Mientras la isla es angosta queda pegado al borde derecho; al ensancharse llega a su lugar.
     let right = (g.x0 + open_x * s).min(g.x1() - 14.0 * s);
@@ -534,10 +541,8 @@ impl Geometry {
     /// Barra de progreso: (x, centro vertical, ancho).
     fn progress_bar(&self) -> (f32, f32, f32) {
         let s = self.scale;
-        let px = self.x0 + COVER_PAD_X * s;
-        let pw = PLAYER_W * s;
-        let bar_x = px + 40.0 * s;
-        let bar_w = pw - 82.0 * s;
+        let bar_x = self.x0 + (TEXT_X + 38.0) * s;
+        let bar_w = (REMAINING_X - 6.0 - TEXT_X - 38.0) * s;
         let bar_cy = self.y0 + PROGRESS_Y * s;
         (bar_x, bar_cy, bar_w.max(10.0 * s))
     }
@@ -653,15 +658,16 @@ pub fn bottom(max_w: f32, max_h: f32, scale: f32, p: f32, presence: f32, shape: 
     g.y0 + g.h
 }
 
-/// Columna a la derecha de la carátula: (x, ancho). El texto nunca pasa del reproductor.
+/// Columna del título a la derecha de la carátula: (x, ancho). Termina antes del botón de
+/// compartir, que abre la fila de controles.
 fn text_column(g: &Geometry, s: f32) -> (f32, f32) {
-    let x = g.x0 + (COVER_PAD_X + COVER_SIZE + 14.0) * s;
-    let w = (PLAYER_W - COVER_SIZE - 14.0) * s;
+    let x = g.x0 + TEXT_X * s;
+    let w = (SHARE_CX - 15.0 - 8.0 - TEXT_X) * s;
     (x, w.max(0.0))
 }
 
-/// Centros de los botones: anterior, reproducir y siguiente al centro del reproductor, con
-/// aleatorio y repetir a sus lados, y el de la letra junto al borde derecho.
+/// Centros de los botones, en la fila del título y pegados al borde derecho del reproductor:
+/// aleatorio, anterior, reproducir, siguiente, repetir y el de la letra al final.
 /// `modes` = (hay botón de aleatorio, hay botón de repetir): depende de la app que suena.
 fn button_centers(
     g: &Geometry,
@@ -670,17 +676,16 @@ fn button_centers(
     modes: (bool, bool),
 ) -> impl Iterator<Item = (Button, f32, f32)> {
     let cy = g.y0 + BUTTONS_Y * s;
-    let media_cx = g.x0 + EXPANDED_COMPACT.0 / 2.0 * s;
-    let lyrics_cx = g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X - 16.0) * s;
-    let gap = 54.0 * s;
-    let side = MODE_GAP * s;
+    // Distancia lógica de cada centro al borde derecho del reproductor: los vecinos quedan a
+    // 3 px de tocarse, así la fila entera cabe junto al título.
+    let x = |from_right: f32| g.x0 + (PLAYER_RIGHT - from_right) * s;
     [
-        (Button::Lyrics, lyrics_cx, cy),
-        (Button::Shuffle, media_cx - side, cy),
-        (Button::Prev, media_cx - gap, cy),
-        (Button::PlayPause, media_cx, cy),
-        (Button::Next, media_cx + gap, cy),
-        (Button::Repeat, media_cx + side, cy),
+        (Button::Lyrics, x(14.0), cy),
+        (Button::Shuffle, x(172.0), cy),
+        (Button::Prev, x(142.0), cy),
+        (Button::PlayPause, x(108.0), cy),
+        (Button::Next, x(74.0), cy),
+        (Button::Repeat, x(44.0), cy),
     ]
     .into_iter()
     .filter(move |(button, _, _)| match button {
@@ -925,7 +930,7 @@ pub fn draw(
         draw_bars(
             pixmap,
             g.x0 + BARS_X * s,
-            cover_y + size / 2.0,
+            g.y0 + PROGRESS_Y * s,
             s,
             c,
             t,
@@ -990,28 +995,23 @@ pub fn draw(
 
     // Áreas de texto: título/artista
     let (text_x, text_w) = text_column(&g, s);
-    // Espacio de las barras de audio y de los indicadores a la derecha del título.
-    let title_inset =
-        if controls.is_some() { 34.0 } else { 0.0 } + INDICATOR_GAP * indicator_count(indicators);
+    // Espacio de los indicadores a la derecha del título.
+    let title_inset = INDICATOR_GAP * indicator_count(indicators);
     let title_area = TextArea {
         x: text_x,
         w: (text_w - title_inset * s).max(0.0),
-        cy: g.y0 + (COVER_PAD_TOP + COVER_SIZE / 2.0) * s,
+        cy: g.y0 + TEXT_CY * s,
         alpha: g.alpha,
     };
 
     // Áreas de texto: tiempos
-    let time_area = time_info.map(|ti| {
-        let px = g.x0 + COVER_PAD_X * s;
-        let pw = PLAYER_W * s;
-        TimeArea {
-            cur_x: px,
-            rem_x: px + pw - 38.0 * s,
-            y: g.y0 + (PROGRESS_Y - 8.0) * s,
-            current: ti.current,
-            remaining: ti.remaining,
-            alpha: g.alpha,
-        }
+    let time_area = time_info.map(|ti| TimeArea {
+        cur_x: g.x0 + TEXT_X * s,
+        rem_x: g.x0 + REMAINING_X * s,
+        y: g.y0 + (PROGRESS_Y - 8.0) * s,
+        current: ti.current,
+        remaining: ti.remaining,
+        alpha: g.alpha,
     });
 
     // Áreas de texto: letras a la derecha cuando hay letra disponible
@@ -1033,16 +1033,16 @@ pub fn draw(
                     pixmap,
                     &paint,
                     g.x0 + (x - LYRICS_GAP / 2.0 - 0.5) * s,
-                    g.y0 + 22.0 * s,
+                    g.y0 + 14.0 * s,
                     s,
-                    (EXPANDED_COMPACT.1 - 44.0) * s,
+                    (EXPANDED_COMPACT.1 - 28.0) * s,
                     0.5 * s,
                 );
                 Some(LyricsArea {
                     x: g.x0 + x * s,
                     w: (LYRICS_EXTRA - LYRICS_GAP) * s,
                     cy,
-                    half_height: room.clamp(0.0, 62.0 * s),
+                    half_height: room.clamp(0.0, 31.0 * s),
                     lines: li.lines,
                     shift: li.shift,
                     sung: li.sung,
@@ -1574,7 +1574,7 @@ const BAR_SPEEDS: [(f32, f32); 4] = [(7.1, 3.3), (9.3, 4.7), (6.2, 5.9), (8.4, 2
 /// Barras de audio junto al título en el reproductor. En pausa quedan quietas y bajas.
 fn draw_bars(pixmap: &mut Pixmap, left: f32, cy: f32, s: f32, c: &Controls, t: f32, alpha: f32) {
     let (bar_w, gap) = (3.0 * s, 2.5 * s);
-    let (min_h, max_h) = (3.0 * s, 20.0 * s);
+    let (min_h, max_h) = (3.0 * s, 16.0 * s);
 
     let mut paint = Paint {
         anti_alias: true,
@@ -2081,11 +2081,15 @@ mod tests {
                                 ..Shape::default()
                             },
                         );
-                        let (_, top, size) = g.cover_rect();
                         assert!(x > text.x + text.w, "las barras invaden el título");
+                        assert!(
+                            x >= g.x0 + BARS_X * scale - 1.0,
+                            "las barras invaden el tiempo restante"
+                        );
                         assert!(x < g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X) * scale);
                         assert!(
-                            y >= top && y <= top + size,
+                            y >= g.y0 + (BUTTONS_Y + PLAY_RADIUS) * scale - 1.0
+                                && y < g.y0 + EXPANDED_COMPACT.1 * scale,
                             "las barras invaden los controles"
                         );
                     }

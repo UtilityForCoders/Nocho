@@ -36,8 +36,8 @@ pub struct ShareState {
 const PAD: f32 = 16.0;
 /// Lado lógico del botón de compartir.
 const PAGE_BUTTON: f32 = 30.0;
-/// Centro horizontal lógico del botón de compartir: a la misma distancia del borde izquierdo
-/// que el botón de la letra del derecho.
+/// Centro horizontal lógico del botón de compartir en la isla sin nada sonando, junto al borde
+/// izquierdo. Con reproductor va en la fila de controles (`island::SHARE_CX`).
 pub const SHARE_BUTTON_CX: f32 = 36.0;
 /// Ancho lógico del botón para volver a la música, a la izquierda del selector de dispositivo.
 const BACK_W: f32 = 34.0;
@@ -55,17 +55,19 @@ pub const SHARE_HEIGHT: f32 = STATUS_Y + 24.0;
 
 /// Rectángulo lógico del botón que lleva a `target`: el de compartir se ve en la música y el
 /// de la música en Compartir. `height` = alto lógico de la isla: sin nada sonando la isla es
-/// una sola fila y el botón queda centrado en ella; con reproductor, a la altura de los controles.
+/// una sola fila y el botón queda a la izquierda, centrado en ella; con reproductor, en la fila
+/// de los controles, antes de aleatorio.
 fn page_button(target: Page, height: f32) -> [f32; 4] {
     match target {
         Page::Share => {
-            let cy = if height >= island::EXPANDED_COMPACT.1 * 0.75 {
-                island::BUTTONS_Y
+            let player = height >= (island::EMPTY_MUSIC_HEIGHT + island::EXPANDED_COMPACT.1) / 2.0;
+            let (cx, cy) = if player {
+                (island::SHARE_CX, island::BUTTONS_Y)
             } else {
-                height / 2.0
+                (SHARE_BUTTON_CX, height / 2.0)
             };
             [
-                SHARE_BUTTON_CX - PAGE_BUTTON / 2.0,
+                cx - PAGE_BUTTON / 2.0,
                 cy - PAGE_BUTTON / 2.0,
                 PAGE_BUTTON,
                 PAGE_BUTTON,
@@ -471,21 +473,24 @@ mod tests {
                 music,
                 scale,
                 Page::Music,
-                music.0 + 60.0 * scale,
-                music.1 + 100.0 * scale
+                music.0 + 40.0 * scale,
+                music.1 + 35.0 * scale
             )
             .is_none());
             // Alineado con los controles, o centrado en la isla de una sola fila sin música.
-            for (height, expected_y) in [(music_h, island::BUTTONS_Y), (56.0, 28.0)] {
+            for (height, expected) in [
+                (music_h, (island::SHARE_CX, island::BUTTONS_Y)),
+                (56.0, (SHARE_BUTTON_CX, 28.0)),
+            ] {
                 let (sx, sy) = tab_center(Page::Share, height);
-                assert_eq!((sx, sy), (SHARE_BUTTON_CX, expected_y));
+                assert_eq!((sx, sy), expected);
                 let at = (80.0, 8.0, width * scale, height * scale, 24.0 * scale);
                 assert!(
                     hit_test(at, scale, Page::Music, at.0 + sx * scale, at.1 + sy * scale)
                         == Some(Hit::Tab(Page::Share))
                 );
             }
-            let mut image = Pixmap::new(640, 400).unwrap();
+            let mut image = Pixmap::new(1100, 400).unwrap();
             draw_volume(
                 &mut image,
                 bounds,
@@ -510,7 +515,7 @@ mod tests {
 
     #[test]
     fn compartir_muestra_estado_y_bandeja_legibles() {
-        let mut image = Pixmap::new(400, 260).unwrap();
+        let mut image = Pixmap::new(560, 260).unwrap();
         let width = island::EXPANDED_COMPACT.0;
         let labels = draw(
             &mut image,
@@ -570,7 +575,7 @@ mod tests {
             (Page::Music, Page::Share, island::EXPANDED_COMPACT.1),
             (Page::Share, Page::Music, SHARE_HEIGHT),
         ] {
-            let mut image = Pixmap::new(400, 260).unwrap();
+            let mut image = Pixmap::new(560, 260).unwrap();
             let labels = draw(
                 &mut image,
                 (0.0, 0.0, width, height, 24.0),
