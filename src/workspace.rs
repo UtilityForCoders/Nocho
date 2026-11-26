@@ -1,8 +1,9 @@
-//! Cabecera con pestañas y acciones del panel principal, compartiendo geometría para dibujo
-//! y clics.
+//! Botones para cambiar de página y acciones del panel Compartir, compartiendo geometría para
+//! dibujo y clics.
 //!
-//! La cabecera (Compartir y Música, con una línea bajo la pestaña activa) va arriba en todas
-//! las páginas; el contenido de cada página empieza debajo de `HEADER_HEIGHT`.
+//! No hay cabecera, para que la isla ocupe poco alto: en la música, un botón de compartir a la
+//! izquierda de los controles (simétrico al de la letra) abre Compartir; en Compartir, un botón
+//! con una nota musical, junto al selector de dispositivo, vuelve a la música.
 use crate::island::{self, Hit, LabelArea, NoticeIcon};
 use tiny_skia::{PathBuilder, Pixmap};
 
@@ -33,65 +34,93 @@ pub struct ShareState {
 
 /// Margen lateral del contenido.
 const PAD: f32 = 16.0;
-const TAB_Y: f32 = 8.0;
-const TAB_HEIGHT: f32 = 30.0;
-/// Línea fina que separa la cabecera del contenido (el volumen se dibuja sobre ella).
-const SEPARATOR_Y: f32 = 42.0;
-/// Alto lógico de la cabecera: el contenido de las páginas empieza aquí.
-pub const HEADER_HEIGHT: f32 = 46.0;
+/// Lado lógico del botón de compartir.
+const PAGE_BUTTON: f32 = 30.0;
+/// Centro horizontal lógico del botón de compartir en la isla sin nada sonando, junto al borde
+/// izquierdo. Con reproductor va en la fila de controles (`island::SHARE_CX`).
+pub const SHARE_BUTTON_CX: f32 = 36.0;
+/// Ancho lógico del botón para volver a la música, a la izquierda del selector de dispositivo.
+const BACK_W: f32 = 34.0;
+/// Línea del nivel de volumen, pegada al borde superior de la isla.
+const VOLUME_Y: f32 = 6.0;
 
-const DEVICE_Y: f32 = 52.0;
+/// Compartir en dos filas, para ocupar poco alto: arriba volver, el destino y la recepción;
+/// abajo elegir archivos, enviar el portapapeles y los mensajes recibidos.
+const DEVICE_Y: f32 = 12.0;
 const DEVICE_H: f32 = 34.0;
-const CARD_Y: f32 = DEVICE_Y + DEVICE_H + 8.0;
-const CARD_H: f32 = 62.0;
-const ROW_Y: f32 = CARD_Y + CARD_H + 8.0;
-const ROW_H: f32 = 32.0;
-const STATUS_Y: f32 = ROW_Y + ROW_H + 8.0;
-pub const SHARE_HEIGHT: f32 = STATUS_Y + 24.0;
+const CARD_Y: f32 = DEVICE_Y + DEVICE_H + 6.0;
+const CARD_H: f32 = 44.0;
+pub const SHARE_HEIGHT: f32 = CARD_Y + CARD_H + 12.0;
+/// Separación lógica entre los elementos de una fila.
+const GAP: f32 = 6.0;
+/// Ancho lógico del interruptor de recepción, al final de la primera fila.
+const RECEIVING_W: f32 = 160.0;
+/// Ancho lógico de cada tarjeta de envío; los mensajes recibidos ocupan el resto de la fila.
+const CARD_W: f32 = 150.0;
 
-/// Rectángulo lógico de cada pestaña: primero Compartir y después Música.
-fn tab_rect(page: Page) -> [f32; 4] {
-    match page {
-        Page::Share => [PAD, TAB_Y, 106.0, TAB_HEIGHT],
-        Page::Music => [PAD + 110.0, TAB_Y, 90.0, TAB_HEIGHT],
+/// Rectángulo lógico del botón que lleva a `target`: el de compartir se ve en la música y el
+/// de la música en Compartir. `height` = alto lógico de la isla: sin nada sonando la isla es
+/// una sola fila y el botón queda a la izquierda, centrado en ella; con reproductor, en la fila
+/// de los controles, antes de aleatorio.
+fn page_button(target: Page, height: f32) -> [f32; 4] {
+    match target {
+        Page::Share => {
+            let player = height >= (island::EMPTY_MUSIC_HEIGHT + island::EXPANDED_COMPACT.1) / 2.0;
+            let (cx, cy) = if player {
+                (island::SHARE_CX, island::BUTTONS_Y)
+            } else {
+                (SHARE_BUTTON_CX, height / 2.0)
+            };
+            [
+                cx - PAGE_BUTTON / 2.0,
+                cy - PAGE_BUTTON / 2.0,
+                PAGE_BUTTON,
+                PAGE_BUTTON,
+            ]
+        }
+        Page::Music => [PAD, DEVICE_Y, BACK_W, DEVICE_H],
     }
 }
 
-/// Centro lógico de una pestaña, relativo a la esquina de la isla.
+/// Centro lógico del botón que lleva a `target`, relativo a la esquina de la isla.
 #[cfg(test)]
-pub fn tab_center(page: Page) -> (f32, f32) {
-    let [x, y, w, h] = tab_rect(page);
+pub fn tab_center(target: Page, height: f32) -> (f32, f32) {
+    let [x, y, w, h] = page_button(target, height);
     (x + w / 2.0, y + h / 2.0)
 }
 
-/// Centro vertical lógico de la cabecera; ahí van también la batería y la actualización.
-pub const fn header_center_y() -> f32 {
-    TAB_Y + TAB_HEIGHT / 2.0
-}
-
-fn regions(width: f32, page: Page) -> Vec<(Hit, [f32; 4])> {
-    let mut regions = vec![
-        (Hit::Tab(Page::Share), tab_rect(Page::Share)),
-        (Hit::Tab(Page::Music), tab_rect(Page::Music)),
-    ];
+fn regions(width: f32, height: f32, page: Page) -> Vec<(Hit, [f32; 4])> {
+    let target = match page {
+        Page::Music => Page::Share,
+        Page::Share => Page::Music,
+    };
+    let mut regions = vec![(Hit::Tab(target), page_button(target, height))];
     if page == Page::Share {
-        let inner = width - 2.0 * PAD;
-        let half = (inner - 8.0) / 2.0;
-        let right = PAD + half + 8.0;
+        let right = width - PAD;
+        let device_x = PAD + BACK_W + GAP;
+        let receiving_x = right - RECEIVING_W;
+        let clipboard_x = PAD + CARD_W + GAP;
+        let inbox_x = clipboard_x + CARD_W + GAP;
         regions.extend([
             (
                 Hit::Share(ShareAction::Device),
-                [PAD, DEVICE_Y, inner, DEVICE_H],
+                [device_x, DEVICE_Y, receiving_x - GAP - device_x, DEVICE_H],
             ),
-            (Hit::Share(ShareAction::Files), [PAD, CARD_Y, half, CARD_H]),
-            (
-                Hit::Share(ShareAction::Clipboard),
-                [right, CARD_Y, half, CARD_H],
-            ),
-            (Hit::Share(ShareAction::Inbox), [PAD, ROW_Y, half, ROW_H]),
             (
                 Hit::Share(ShareAction::Receiving),
-                [right, ROW_Y, half, ROW_H],
+                [receiving_x, DEVICE_Y, RECEIVING_W, DEVICE_H],
+            ),
+            (
+                Hit::Share(ShareAction::Files),
+                [PAD, CARD_Y, CARD_W, CARD_H],
+            ),
+            (
+                Hit::Share(ShareAction::Clipboard),
+                [clipboard_x, CARD_Y, CARD_W, CARD_H],
+            ),
+            (
+                Hit::Share(ShareAction::Inbox),
+                [inbox_x, CARD_Y, right - inbox_x, CARD_H],
             ),
         ]);
     }
@@ -105,9 +134,9 @@ pub fn hit_test(
     x: f32,
     y: f32,
 ) -> Option<Hit> {
-    let (left, top, width, _, _) = bounds;
+    let (left, top, width, height, _) = bounds;
     let (x, y) = ((x - left) / scale, (y - top) / scale);
-    regions(width / scale, page)
+    regions(width / scale, height / scale, page)
         .into_iter()
         .find(|(_, [rx, ry, w, h])| x >= *rx && x <= rx + w && y >= *ry && y <= ry + h)
         .map(|(hit, _)| hit)
@@ -221,8 +250,8 @@ pub fn draw(
     state: &ShareState,
     color: crate::settings::IslandColor,
 ) -> Vec<LabelArea> {
-    let (left, top, width, _, _) = bounds;
-    let width = width / scale;
+    let (left, top, width, height, _) = bounds;
+    let (width, height) = (width / scale, height / scale);
     let accent = color.light();
     let mut canvas = Canvas {
         pixmap,
@@ -233,39 +262,27 @@ pub fn draw(
     };
     let mut labels = Vec::new();
 
-    // Separador de la cabecera, de borde a borde del contenido.
-    canvas.fill(WHITE, 22.0, [PAD, SEPARATOR_Y, width - 2.0 * PAD, 1.0], 0.5);
-
-    for (hit, rect) in regions(width, page) {
+    for (hit, rect) in regions(width, height, page) {
         let hover = hovered == Some(hit);
         let [x, y, w, h] = rect;
         match hit {
-            Hit::Tab(tab) => {
-                let active = tab == page;
-                if hover && !active {
-                    canvas.fill(WHITE, 14.0, rect, 9.0);
-                }
-                if active {
-                    canvas.fill(
-                        accent,
-                        255.0,
-                        [x + 6.0, SEPARATOR_Y - 2.5, w - 12.0, 2.5],
-                        1.25,
-                    );
-                }
-                let (icon, text) = match tab {
-                    Page::Music => (NoticeIcon::Music, "Música"),
-                    Page::Share => (NoticeIcon::Share, "Compartir"),
+            Hit::Tab(target) => {
+                let icon = match target {
+                    Page::Share => {
+                        // Como los botones del reproductor: solo un círculo tenue bajo el mouse.
+                        if hover {
+                            canvas.fill(WHITE, 35.0, rect, w / 2.0);
+                        }
+                        NoticeIcon::Share
+                    }
+                    Page::Music => {
+                        // Con el mismo estilo que el selector de dispositivo, a su lado.
+                        canvas.fill(WHITE, if hover { 30.0 } else { 18.0 }, rect, 12.0);
+                        canvas.outline(WHITE, 20.0, rect, 12.0);
+                        NoticeIcon::Music
+                    }
                 };
-                let tone = if active { WHITE } else { accent };
-                canvas.icon(icon, tone, x + 16.0, y + h / 2.0, 0.8);
-                labels.push(canvas.label(
-                    text.to_string(),
-                    [x + 32.0, y + (h - 18.0) / 2.0, w - 34.0, 18.0],
-                    if active { 1.0 } else { 0.62 },
-                    active,
-                    false,
-                ));
+                canvas.icon(icon, accent, x + w / 2.0, y + h / 2.0, 0.7);
             }
             Hit::Share(ShareAction::Device) => {
                 canvas.fill(WHITE, if hover { 30.0 } else { 18.0 }, rect, 12.0);
@@ -309,16 +326,16 @@ pub fn draw(
                     14.0,
                 );
                 canvas.outline(if primary { accent } else { WHITE }, border, rect, 14.0);
-                let icon_box = [x + 12.0, y + (h - 34.0) / 2.0, 34.0, 34.0];
-                canvas.fill(if primary { accent } else { WHITE }, 46.0, icon_box, 10.0);
-                canvas.outline(WHITE, 30.0, icon_box, 10.0);
+                let icon_box = [x + 8.0, y + (h - 30.0) / 2.0, 30.0, 30.0];
+                canvas.fill(if primary { accent } else { WHITE }, 46.0, icon_box, 9.0);
+                canvas.outline(WHITE, 30.0, icon_box, 9.0);
                 let (icon, first, second) = match action {
                     ShareAction::Files => (NoticeIcon::Usb, "Elegir", "archivos"),
                     _ => (NoticeIcon::Keyboard, "Enviar", "portapapeles"),
                 };
-                canvas.icon(icon, WHITE, x + 29.0, y + h / 2.0, 0.72);
-                let text_x = x + 54.0;
-                let text_w = w - 58.0;
+                canvas.icon(icon, WHITE, x + 23.0, y + h / 2.0, 0.66);
+                let text_x = x + 46.0;
+                let text_w = w - 50.0;
                 labels.push(canvas.label(
                     first.to_string(),
                     [text_x, y + h / 2.0 - 18.0, text_w, 18.0],
@@ -388,24 +405,10 @@ pub fn draw(
             _ => {}
         }
     }
-    if page == Page::Share {
-        let text = if state.receiving {
-            "Tus equipos vinculados pueden enviarte archivos"
-        } else {
-            "Recepción pausada: no se aceptan envíos"
-        };
-        labels.push(canvas.label(
-            text.to_string(),
-            [PAD + 4.0, STATUS_Y, width - 2.0 * PAD - 8.0, 16.0],
-            0.55,
-            false,
-            true,
-        ));
-    }
     labels
 }
 
-/// Nivel de volumen sobre el separador de la cabecera, mientras se cambia.
+/// Nivel de volumen en una línea fina junto al borde superior de la isla, mientras se cambia.
 pub fn draw_volume(
     pixmap: &mut Pixmap,
     bounds: (f32, f32, f32, f32, f32),
@@ -423,7 +426,7 @@ pub fn draw_volume(
         alpha,
     };
     let w = width / scale - 2.0 * PAD;
-    let y = SEPARATOR_Y - 1.0;
+    let y = VOLUME_Y;
     canvas.fill(WHITE, 55.0, [PAD, y, w, 3.0], 1.5);
     canvas.fill(
         color.light(),
@@ -438,11 +441,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pestañas_y_acciones_coinciden_a_distintos_dpi() {
+    fn botones_y_acciones_coinciden_a_distintos_dpi() {
         for scale in [1.0, 1.25, 1.5, 2.0] {
             let width = island::EXPANDED_COMPACT.0;
             let bounds = (80.0, 8.0, width * scale, SHARE_HEIGHT * scale, 24.0 * scale);
-            let regions = regions(width, Page::Share);
+            let regions = regions(width, SHARE_HEIGHT, Page::Share);
             for (index, (_, [x, y, w, h])) in regions.iter().enumerate() {
                 assert!(*x >= 16.0 && x + w <= width - 16.0);
                 assert!(*y >= 8.0 && y + h <= SHARE_HEIGHT - 12.0);
@@ -461,26 +464,31 @@ mod tests {
                     ) == Some(hit)
                 );
             }
-            // En la música solo responden las pestañas: el resto es del reproductor.
+            // En la música solo responde el botón de compartir: el resto es del reproductor.
+            let music_h = island::EXPANDED_COMPACT.1;
+            let music = (80.0, 8.0, width * scale, music_h * scale, 24.0 * scale);
             assert!(hit_test(
-                bounds,
+                music,
                 scale,
                 Page::Music,
-                bounds.0 + 60.0 * scale,
-                bounds.1 + 100.0 * scale
+                music.0 + 40.0 * scale,
+                music.1 + 35.0 * scale
             )
             .is_none());
-            let (mx, my) = tab_center(Page::Music);
-            assert!(
-                hit_test(
-                    bounds,
-                    scale,
-                    Page::Music,
-                    bounds.0 + mx * scale,
-                    bounds.1 + my * scale
-                ) == Some(Hit::Tab(Page::Music))
-            );
-            let mut image = Pixmap::new(640, 400).unwrap();
+            // Alineado con los controles, o centrado en la isla de una sola fila sin música.
+            for (height, expected) in [
+                (music_h, (island::SHARE_CX, island::BUTTONS_Y)),
+                (56.0, (SHARE_BUTTON_CX, 28.0)),
+            ] {
+                let (sx, sy) = tab_center(Page::Share, height);
+                assert_eq!((sx, sy), expected);
+                let at = (80.0, 8.0, width * scale, height * scale, 24.0 * scale);
+                assert!(
+                    hit_test(at, scale, Page::Music, at.0 + sx * scale, at.1 + sy * scale)
+                        == Some(Hit::Tab(Page::Share))
+                );
+            }
+            let mut image = Pixmap::new(1100, 400).unwrap();
             draw_volume(
                 &mut image,
                 bounds,
@@ -489,7 +497,7 @@ mod tests {
                 0.5,
                 crate::settings::IslandColor::default(),
             );
-            let y = (bounds.1 + SEPARATOR_Y * scale) as u32;
+            let y = (bounds.1 + (VOLUME_Y + 1.5) * scale) as u32;
             let inner = width - 2.0 * PAD;
             for (x, expected) in [
                 (PAD - 4.0, 0),
@@ -505,7 +513,7 @@ mod tests {
 
     #[test]
     fn compartir_muestra_estado_y_bandeja_legibles() {
-        let mut image = Pixmap::new(400, 260).unwrap();
+        let mut image = Pixmap::new(560, 260).unwrap();
         let width = island::EXPANDED_COMPACT.0;
         let labels = draw(
             &mut image,
@@ -528,7 +536,6 @@ mod tests {
         assert!(has(&labels, "Para: Portátil"));
         assert!(has(&labels, "Elegir") && has(&labels, "archivos"));
         assert!(has(&labels, "Enviar") && has(&labels, "portapapeles"));
-        assert!(has(&labels, "Compartir") && has(&labels, "Música"));
         for label in &labels {
             assert!(
                 label.x >= 0.0 && label.x + label.w <= width,
@@ -560,25 +567,33 @@ mod tests {
     }
 
     #[test]
-    fn la_pestaña_activa_se_subraya() {
-        for page in [Page::Music, Page::Share] {
-            let mut image = Pixmap::new(400, 120).unwrap();
-            let width = island::EXPANDED_COMPACT.0;
-            draw(
+    fn cada_pagina_muestra_el_boton_de_la_otra() {
+        let width = island::EXPANDED_COMPACT.0;
+        for (page, target, height) in [
+            (Page::Music, Page::Share, island::EXPANDED_COMPACT.1),
+            (Page::Share, Page::Music, SHARE_HEIGHT),
+        ] {
+            let mut image = Pixmap::new(560, 260).unwrap();
+            let labels = draw(
                 &mut image,
-                (0.0, 0.0, width, SHARE_HEIGHT, 24.0),
+                (0.0, 0.0, width, height, 24.0),
                 1.0,
                 1.0,
                 page,
-                None,
+                Some(Hit::Tab(target)),
                 &ShareState::default(),
                 crate::settings::IslandColor::default(),
             );
-            let y = (SEPARATOR_Y - 1.5) as u32;
-            for tab in [Page::Music, Page::Share] {
-                let (cx, _) = tab_center(tab);
-                let alpha = image.pixel(cx as u32, y).unwrap().alpha();
-                assert_eq!(alpha == 255, tab == page, "{tab:?} en {page:?}");
+            // Sin textos de pestañas: el botón es solo un ícono.
+            assert!(!labels
+                .iter()
+                .any(|l| l.text == "Música" || l.text == "Compartir"));
+            let (cx, cy) = tab_center(target, height);
+            let alpha = image.pixel((cx + 11.0) as u32, cy as u32).unwrap().alpha();
+            assert!(alpha > 0, "{target:?} en {page:?}");
+            // Nada de la cabecera de antes (pestañas, separador) arriba del contenido.
+            for x in [60, 160, 260] {
+                assert_eq!(image.pixel(x, 4).unwrap().alpha(), 0, "{page:?}");
             }
         }
     }

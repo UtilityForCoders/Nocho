@@ -1450,7 +1450,13 @@ impl App {
 
     /// Lleva la isla a expandida o contraída, cada una con su movimiento: al expandirse, rápido
     /// y con un pequeño rebote; al encogerse, más lento y sin rebote, frenando suave al final.
+    /// Mientras sale hacia arriba no se encoge: subía todavía ancha y a la vez se cerraba hacia
+    /// el centro, como si se fuera en diagonal. Se encoge en `tick`, ya fuera de la vista.
     fn aim_expansion(&mut self, expand: bool) {
+        if !expand && self.leaving() {
+            self.start_animation();
+            return;
+        }
         let (stiffness, damping) = if expand {
             EXPAND_SPRING
         } else {
@@ -1631,6 +1637,11 @@ impl App {
         }
         self.pressed = Some((button, Instant::now()));
         self.start_animation();
+    }
+
+    /// La isla está subiendo para esconderse y todavía se ve una parte.
+    fn leaving(&self) -> bool {
+        !self.visible && self.presence.target() <= 0.0 && self.presence.value > 0.0
     }
 
     /// En el borde queda la barrita con el progreso y los avisos integrados.
@@ -1842,7 +1853,8 @@ impl App {
             self.raise();
             self.presence.set_target(1.0);
         } else {
-            // Sale hacia arriba y a la vez se contrae; la ventana se oculta al terminar (en `tick`).
+            // Sale recta hacia arriba con su forma; se contrae y la ventana se oculta al terminar
+            // (en `tick`).
             self.presence.set_target(0.0);
             self.hovered = false;
             self.lingering = false;
@@ -2331,6 +2343,10 @@ impl App {
 
         let expanding = self.spring.step(dt);
         let entering = self.presence.step(dt);
+        // Terminó de subir: recién ahora, fuera de la vista, vuelve a la forma de reposo.
+        if !entering && !self.visible && self.presence.value <= 0.0 && self.spring.value > 0.0 {
+            self.spring.reset(0.0);
+        }
         let lyrics_moving = self.lyrics_spring.step(dt);
         let reshaping = self.notice_spring.step(dt);
         let moving = expanding || entering || lyrics_moving || reshaping || centering;
@@ -2383,7 +2399,9 @@ impl App {
         // Conserva el aviso vencido durante la contracción. Si la isla sigue abierta,
         // vuelve al reproductor sin esperar a que baje el resorte de expansión.
         if self.notice.is_none()
-            && (self.hovered || self.spring.target() > 0.0 || self.spring.value <= 0.55)
+            && (self.hovered
+                || (self.visible && self.spring.target() > 0.0)
+                || self.spring.value <= 0.55)
         {
             self.last_notice = None;
         }
@@ -4275,8 +4293,11 @@ mod tests {
             assert!(expanded.bottom > resting.bottom);
             app.end_linger();
             assert!(app.idle_hidden && !app.visible && app.edge_strip());
+            // Sube recta, con su forma: no se encoge mientras todavía se ve.
+            assert_eq!(app.spring.target(), 1.0, "se encoge mientras sube");
             app.presence.reset(0.0);
-            app.spring.reset(0.0);
+            app.tick();
+            assert_eq!(app.spring.value, 0.0, "arriba vuelve a la forma de reposo");
             app.render();
             assert_eq!(
                 window_rect(),
@@ -4340,13 +4361,14 @@ mod tests {
                 1.0,
                 app.shape(),
             );
-            let (tab_x, tab_y) = workspace::tab_center(workspace::Page::Music);
+            let (tab_x, tab_y) =
+                workspace::tab_center(workspace::Page::Music, bounds.3 / app.scale);
             assert!(
                 app.hit_at(bounds.0 + tab_x * app.scale, bounds.1 + tab_y * app.scale)
                     == Some(Hit::Tab(workspace::Page::Music))
             );
             assert!(
-                app.hit_at(bounds.0 + 70.0 * app.scale, bounds.1 + 120.0 * app.scale)
+                app.hit_at(bounds.0 + 70.0 * app.scale, bounds.1 + 80.0 * app.scale)
                     == Some(Hit::Share(workspace::ShareAction::Files))
             );
             app.battery_visible = true;
@@ -4362,10 +4384,27 @@ mod tests {
                 windows_cached: false,
                 detail: String::new(),
             });
+            // En Compartir no hay indicadores: su primera fila es el selector de dispositivo.
             assert!(
                 app.hit_at(
                     bounds.0 + bounds.2 - 24.0 * app.scale,
-                    bounds.1 + 14.0 * app.scale
+                    bounds.1 + 31.0 * app.scale
+                ) != Some(Hit::Battery)
+            );
+            // Sin música, la batería va al final de la única fila.
+            app.select_page(workspace::Page::Music);
+            let bounds = island::backdrop_geometry(
+                app.surface.width as f32,
+                app.max_surface_height as f32,
+                app.scale,
+                1.0,
+                1.0,
+                app.shape(),
+            );
+            assert!(
+                app.hit_at(
+                    bounds.0 + bounds.2 - 30.0 * app.scale,
+                    bounds.1 + bounds.3 / 2.0
                 ) == Some(Hit::Battery)
             );
             app.low_battery_devices = app.battery_devices.clone();

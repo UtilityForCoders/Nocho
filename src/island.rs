@@ -3,8 +3,9 @@
 //! La isla es un cuadro flotante con las cuatro esquinas redondeadas, separada del borde superior
 //! de la pantalla por `TOP_GAP` (sin tocar el techo).
 //! En reposo queda una línea superior; al abrirse muestra directamente el reproductor.
-//! Expandida muestra una tarjeta completa flotante: cabecera con pestañas, reproductor con
-//! carátula, tiempos y controles centrados, y debajo la letra sincronizada si está activa.
+//! Expandida muestra una franja baja flotante, sin cabecera: la carátula a la izquierda, el título
+//! con los controles a su derecha, debajo los tiempos y la barra de progreso, y a la derecha la
+//! letra sincronizada si está activa.
 
 use tiny_skia::{
     FillRule, FilterQuality, Paint, Path, PathBuilder, Pattern, Pixmap, SpreadMode, Transform,
@@ -14,16 +15,19 @@ use tiny_skia::{
 /// Línea desde la que empieza la animación de apertura.
 const RESTING: (f32, f32, f32) = (88.0, 3.0, 1.5);
 
-/// Expandida compacta (sin letra): tarjeta flotante con cabecera y reproductor.
-pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 194.0, 24.0);
+/// Expandida compacta (sin letra): franja flotante con el reproductor, lo más baja posible.
+pub const EXPANDED_COMPACT: (f32, f32, f32) = (500.0, 70.0, 24.0);
 
-/// Alto lógico que suma la letra sincronizada, debajo de los controles.
-const LYRICS_EXTRA: f32 = 92.0;
+/// Ancho lógico que suma la letra sincronizada, en una columna a la derecha del reproductor.
+const LYRICS_EXTRA: f32 = 260.0;
+/// Margen lógico entre el reproductor y la columna de la letra; en medio va una línea fina.
+const LYRICS_GAP: f32 = 16.0;
 
-/// Expandida con letra sincronizada: el mismo ancho, más alta para los versos.
+/// Expandida con letra sincronizada: el mismo alto, más ancha para los versos.
 pub const EXPANDED_LYRICS: (f32, f32, f32) =
-    (EXPANDED_COMPACT.0, EXPANDED_COMPACT.1 + LYRICS_EXTRA, 24.0);
-pub const EMPTY_MUSIC_HEIGHT: f32 = 86.0;
+    (EXPANDED_COMPACT.0 + LYRICS_EXTRA, EXPANDED_COMPACT.1, 24.0);
+/// Sin nada sonando: una sola fila con el botón de compartir y el aviso.
+pub const EMPTY_MUSIC_HEIGHT: f32 = 56.0;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Shape {
@@ -44,18 +48,29 @@ const TOP_GAP: f32 = 8.0;
 pub const EXPANDED_CONTENT_START: f32 = 0.45;
 
 /// Medidas del panel izquierdo de reproducción (píxeles lógicos).
-const COVER_PAD_X: f32 = 20.0;
+const COVER_PAD_X: f32 = 14.0;
 /// Margen superior lógico de la carátula dentro del reproductor.
-const COVER_PAD_TOP: f32 = crate::workspace::HEADER_HEIGHT + 8.0;
-/// Lado lógico de la carátula expandida.
-const COVER_SIZE: f32 = 52.0;
-const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 20.0;
-/// Centro vertical lógico de la fila de controles, centrada bajo la barra de progreso.
-const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
+const COVER_PAD_TOP: f32 = 12.0;
+/// Lado lógico de la carátula expandida: ocupa casi todo el alto de la franja.
+const COVER_SIZE: f32 = 46.0;
+/// Centro vertical lógico del título y el artista.
+const TEXT_CY: f32 = 26.0;
+/// Centro vertical lógico de la fila de tiempos y barra de progreso, bajo el título.
+const PROGRESS_Y: f32 = 51.0;
+/// Centro vertical lógico de los controles, en la fila del título y a su derecha.
+pub const BUTTONS_Y: f32 = TEXT_CY;
+/// Borde derecho lógico del reproductor (la letra va a su derecha).
+const PLAYER_RIGHT: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X;
+/// Borde izquierdo lógico de las barras de audio, al final de la fila de progreso.
+const BARS_X: f32 = PLAYER_RIGHT - 20.0;
+/// Borde izquierdo lógico del tiempo restante, antes de las barras de audio.
+const REMAINING_X: f32 = BARS_X - 48.0;
+/// Centro horizontal lógico del botón de compartir, a la izquierda de los controles.
+pub const SHARE_CX: f32 = PLAYER_RIGHT - 204.0;
 /// Radio lógico de las esquinas de la carátula.
 const COVER_RADIUS: f32 = 10.0;
-/// Ancho lógico del reproductor (la letra va debajo, con el mismo ancho).
-const PLAYER_W: f32 = EXPANDED_COMPACT.0 - 2.0 * COVER_PAD_X;
+/// Borde izquierdo lógico de la columna del título y de los tiempos, a la derecha de la carátula.
+const TEXT_X: f32 = COVER_PAD_X + COVER_SIZE + 12.0;
 
 /// Barra de progreso: grosor (normal y con mouse encima) y zona de clic.
 const PROGRESS_THICK: (f32, f32) = (3.2, 5.0);
@@ -66,10 +81,11 @@ const PROGRESS_HIT: f32 = 8.0;
 const OVERSHOOT: f32 = 1.08;
 
 /// Radio lógico de la zona de clic (y del resaltado) de los botones.
-const BUTTON_RADIUS: f32 = 15.0;
-/// Distancia lógica del centro a los botones de aleatorio y repetir: repetir queda entre
-/// "siguiente" y el botón de la letra, sin que se toquen sus zonas de clic.
-const MODE_GAP: f32 = 89.0;
+const BUTTON_RADIUS: f32 = 14.0;
+/// Escala de los íconos del reproductor respecto de su tamaño original.
+const ICON_SCALE: f32 = 0.86;
+/// Radio lógico del círculo (y de la zona de clic) del botón de reproducir.
+const PLAY_RADIUS: f32 = 17.0;
 /// Radio lógico de la zona de clic de aleatorio y repetir, más chica por la cercanía.
 const MODE_RADIUS: f32 = 13.0;
 
@@ -77,7 +93,7 @@ const MODE_RADIUS: f32 = 13.0;
 pub fn window_size() -> (f32, f32) {
     (
         EXPANDED_LYRICS.0 * OVERSHOOT + 16.0,
-        TOP_GAP + crate::workspace::SHARE_HEIGHT.max(EXPANDED_LYRICS.1) * OVERSHOOT + 16.0,
+        TOP_GAP + crate::workspace::SHARE_HEIGHT.max(EXPANDED_COMPACT.1) * OVERSHOOT + 16.0,
     )
 }
 
@@ -178,18 +194,36 @@ pub struct Indicators {
     pub hovered: Option<Hit>,
 }
 
-fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool) -> (f32, f32) {
+/// Distancia lógica entre los centros de la batería y la actualización cuando se ven las dos.
+const INDICATOR_GAP: f32 = 26.0;
+
+/// Cuántos indicadores se ven: ocupan lugar en la fila del título.
+fn indicator_count(indicators: Indicators) -> f32 {
+    f32::from(u8::from(indicators.battery) + u8::from(indicators.update))
+}
+
+/// Centro de un indicador. Abierta, la isla no tiene cabecera: en el reproductor van en la fila
+/// del título, a la izquierda de las barras de audio; sin nada sonando, al final de su única
+/// fila. Mientras se abre, se desplazan desde la esquina superior derecha.
+fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool, shape: Shape) -> (f32, f32) {
     let p = p.clamp(0.0, 1.0);
     let s = g.scale;
-    let right = g.x1() - (14.0 + 14.0 * p) * s;
+    let (open_x, open_y) = if shape.empty_music {
+        (
+            EXPANDED_COMPACT.0 - COVER_PAD_X - 10.0,
+            EMPTY_MUSIC_HEIGHT / 2.0,
+        )
+    } else {
+        (SHARE_CX - 29.0, TEXT_CY)
+    };
+    // Mientras la isla es angosta queda pegado al borde derecho; al ensancharse llega a su lugar.
+    let right = (g.x0 + open_x * s).min(g.x1() - 14.0 * s);
     let x = if battery && update {
-        right - (22.0 + 6.0 * p) * s
+        right - INDICATOR_GAP * s
     } else {
         right
     };
-    // Abierta, queda alineado con las pestañas de la cabecera.
-    let header = crate::workspace::header_center_y();
-    (x, g.y0 + ((17.0 + (header - 17.0) * p) * s).min(g.h / 2.0))
+    (x, g.y0 + ((17.0 + (open_y - 17.0) * p) * s).min(g.h / 2.0))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -205,7 +239,7 @@ pub fn indicator_hit_test(
     y: f32,
 ) -> Option<Hit> {
     let g = geometry(max_w, max_h, scale, p, presence, shape);
-    if presence < 0.9 || g.alpha < 1.0 {
+    if presence < 0.9 || g.alpha < 1.0 || shape.share {
         return None;
     }
     for (shown, hit, battery) in [
@@ -215,7 +249,7 @@ pub fn indicator_hit_test(
         if !shown {
             continue;
         }
-        let (cx, cy) = indicator_center(&g, p, battery, indicators.update);
+        let (cx, cy) = indicator_center(&g, p, battery, indicators.update, shape);
         if (x - cx).abs() <= INDICATOR_HIT_R * scale && (y - cy).abs() <= INDICATOR_HIT_R * scale {
             return Some(hit);
         }
@@ -223,8 +257,15 @@ pub fn indicator_hit_test(
     None
 }
 
-fn draw_indicators(pixmap: &mut Pixmap, g: &Geometry, p: f32, indicators: Indicators) {
-    if g.alpha <= 0.0 {
+/// En Compartir no se dibujan: su primera fila es el selector de dispositivo.
+fn draw_indicators(
+    pixmap: &mut Pixmap,
+    g: &Geometry,
+    p: f32,
+    indicators: Indicators,
+    shape: Shape,
+) {
+    if g.alpha <= 0.0 || shape.share {
         return;
     }
     let mut paint = Paint {
@@ -255,7 +296,7 @@ fn draw_indicators(pixmap: &mut Pixmap, g: &Geometry, p: f32, indicators: Indica
         if !shown {
             continue;
         }
-        let (cx, cy) = indicator_center(g, p, battery, indicators.update);
+        let (cx, cy) = indicator_center(g, p, battery, indicators.update, shape);
         let s = g.scale;
         let [r, green, b] = color;
         paint.set_color_rgba8(
@@ -500,10 +541,8 @@ impl Geometry {
     /// Barra de progreso: (x, centro vertical, ancho).
     fn progress_bar(&self) -> (f32, f32, f32) {
         let s = self.scale;
-        let px = self.x0 + COVER_PAD_X * s;
-        let pw = PLAYER_W * s;
-        let bar_x = px + 40.0 * s;
-        let bar_w = pw - 82.0 * s;
+        let bar_x = self.x0 + (TEXT_X + 38.0) * s;
+        let bar_w = (REMAINING_X - 6.0 - TEXT_X - 38.0) * s;
         let bar_cy = self.y0 + PROGRESS_Y * s;
         (bar_x, bar_cy, bar_w.max(10.0 * s))
     }
@@ -560,14 +599,14 @@ fn expanded_size(shape: Shape) -> (f32, f32) {
     let n = shape.notice.clamp(-0.1, 1.1);
     let toward_notice = |music: f32, notice: f32| music + (notice - music) * n;
     (
-        toward_notice(EXPANDED_COMPACT.0, NOTICE.0),
+        toward_notice(EXPANDED_COMPACT.0 + LYRICS_EXTRA * lyrics_p, NOTICE.0),
         toward_notice(
             if shape.share {
                 crate::workspace::SHARE_HEIGHT
             } else if shape.empty_music {
                 EMPTY_MUSIC_HEIGHT
             } else {
-                EXPANDED_COMPACT.1 + LYRICS_EXTRA * lyrics_p
+                EXPANDED_COMPACT.1
             },
             NOTICE.1,
         ),
@@ -619,15 +658,16 @@ pub fn bottom(max_w: f32, max_h: f32, scale: f32, p: f32, presence: f32, shape: 
     g.y0 + g.h
 }
 
-/// Columna a la derecha de la carátula: (x, ancho). El texto nunca pasa del reproductor.
+/// Columna del título a la derecha de la carátula: (x, ancho). Termina antes del botón de
+/// compartir, que abre la fila de controles.
 fn text_column(g: &Geometry, s: f32) -> (f32, f32) {
-    let x = g.x0 + (COVER_PAD_X + COVER_SIZE + 14.0) * s;
-    let w = (PLAYER_W - COVER_SIZE - 14.0) * s;
+    let x = g.x0 + TEXT_X * s;
+    let w = (SHARE_CX - 15.0 - 8.0 - TEXT_X) * s;
     (x, w.max(0.0))
 }
 
-/// Centros de los botones: anterior, reproducir y siguiente al centro del reproductor, con
-/// aleatorio y repetir a sus lados, y el de la letra junto al borde derecho.
+/// Centros de los botones, en la fila del título y pegados al borde derecho del reproductor:
+/// aleatorio, anterior, reproducir, siguiente, repetir y el de la letra al final.
 /// `modes` = (hay botón de aleatorio, hay botón de repetir): depende de la app que suena.
 fn button_centers(
     g: &Geometry,
@@ -636,17 +676,16 @@ fn button_centers(
     modes: (bool, bool),
 ) -> impl Iterator<Item = (Button, f32, f32)> {
     let cy = g.y0 + BUTTONS_Y * s;
-    let media_cx = g.x0 + EXPANDED_COMPACT.0 / 2.0 * s;
-    let lyrics_cx = g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X - 16.0) * s;
-    let gap = 54.0 * s;
-    let side = MODE_GAP * s;
+    // Distancia lógica de cada centro al borde derecho del reproductor: los vecinos quedan a
+    // 3 px de tocarse, así la fila entera cabe junto al título.
+    let x = |from_right: f32| g.x0 + (PLAYER_RIGHT - from_right) * s;
     [
-        (Button::Lyrics, lyrics_cx, cy),
-        (Button::Shuffle, media_cx - side, cy),
-        (Button::Prev, media_cx - gap, cy),
-        (Button::PlayPause, media_cx, cy),
-        (Button::Next, media_cx + gap, cy),
-        (Button::Repeat, media_cx + side, cy),
+        (Button::Lyrics, x(14.0), cy),
+        (Button::Shuffle, x(172.0), cy),
+        (Button::Prev, x(142.0), cy),
+        (Button::PlayPause, x(108.0), cy),
+        (Button::Next, x(74.0), cy),
+        (Button::Repeat, x(44.0), cy),
     ]
     .into_iter()
     .filter(move |(button, _, _)| match button {
@@ -715,7 +754,7 @@ pub fn hit_test(
     button_centers(&g, scale, lyrics_available, modes)
         .find(|&(button, bx, by)| {
             let r = match button {
-                Button::PlayPause => 19.0,
+                Button::PlayPause => PLAY_RADIUS,
                 Button::Shuffle | Button::Repeat => MODE_RADIUS,
                 _ => BUTTON_RADIUS,
             } * scale;
@@ -811,7 +850,7 @@ pub fn draw(
     }
 
     if notice.is_none() {
-        draw_indicators(pixmap, &g, p, indicators);
+        draw_indicators(pixmap, &g, p, indicators, shape);
     }
 
     if g.alpha <= 0.0 {
@@ -845,15 +884,20 @@ pub fn draw(
         });
     }
     if shape.empty_music {
-        let header = crate::workspace::HEADER_HEIGHT;
-        let y = g.y0 + (header + (EMPTY_MUSIC_HEIGHT - header) / 2.0) * s;
-        let alpha = g.alpha * ((g.h / s - header - 10.0) / 12.0).clamp(0.0, 1.0);
+        // Una sola fila: el botón de compartir a la izquierda y el aviso a su lado.
+        let y = g.y0 + EMPTY_MUSIC_HEIGHT / 2.0 * s;
+        let alpha = g.alpha * ((g.h / s - 30.0) / 12.0).clamp(0.0, 1.0);
+        let text_x = crate::workspace::SHARE_BUTTON_CX + 26.0;
         return Some(LayoutAreas {
             labels: vec![LabelArea {
                 text: "Sin reproducción".into(),
-                x: g.x0 + (COVER_PAD_X + 4.0) * s,
+                x: g.x0 + text_x * s,
                 y: y - 10.0 * s,
-                w: (PLAYER_W - 8.0) * s,
+                w: (EXPANDED_COMPACT.0
+                    - COVER_PAD_X
+                    - text_x
+                    - INDICATOR_GAP * indicator_count(indicators))
+                    * s,
                 h: 20.0 * s,
                 alpha,
                 strong: false,
@@ -885,8 +929,8 @@ pub fn draw(
     if let Some(c) = &controls {
         draw_bars(
             pixmap,
-            g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0) * s,
-            cover_y + size / 2.0,
+            g.x0 + BARS_X * s,
+            g.y0 + PROGRESS_Y * s,
             s,
             c,
             t,
@@ -951,33 +995,23 @@ pub fn draw(
 
     // Áreas de texto: título/artista
     let (text_x, text_w) = text_column(&g, s);
-    // Espacio de las barras de audio a la derecha del título.
-    let title_inset = 34.0;
+    // Espacio de los indicadores a la derecha del título.
+    let title_inset = INDICATOR_GAP * indicator_count(indicators);
     let title_area = TextArea {
         x: text_x,
-        w: (text_w
-            - if controls.is_some() {
-                title_inset * s
-            } else {
-                0.0
-            })
-        .max(0.0),
-        cy: g.y0 + (COVER_PAD_TOP + COVER_SIZE / 2.0) * s,
+        w: (text_w - title_inset * s).max(0.0),
+        cy: g.y0 + TEXT_CY * s,
         alpha: g.alpha,
     };
 
     // Áreas de texto: tiempos
-    let time_area = time_info.map(|ti| {
-        let px = g.x0 + COVER_PAD_X * s;
-        let pw = PLAYER_W * s;
-        TimeArea {
-            cur_x: px,
-            rem_x: px + pw - 38.0 * s,
-            y: g.y0 + (PROGRESS_Y - 8.0) * s,
-            current: ti.current,
-            remaining: ti.remaining,
-            alpha: g.alpha,
-        }
+    let time_area = time_info.map(|ti| TimeArea {
+        cur_x: g.x0 + TEXT_X * s,
+        rem_x: g.x0 + REMAINING_X * s,
+        y: g.y0 + (PROGRESS_Y - 8.0) * s,
+        current: ti.current,
+        remaining: ti.remaining,
+        alpha: g.alpha,
     });
 
     // Áreas de texto: letras a la derecha cuando hay letra disponible
@@ -986,20 +1020,34 @@ pub fn draw(
             if li.lines.is_empty() && li.status.is_none() {
                 None
             } else {
-                // Debajo de los controles, centrada; mientras la isla crece, el recorte llega
-                // solo hasta su borde inferior.
-                let cy = g.y0 + (EXPANDED_COMPACT.1 + LYRICS_EXTRA / 2.0 - 8.0) * s;
+                // En una columna a la derecha del reproductor, centrada en el alto de la isla.
+                // Mientras la isla se ensancha, la columna todavía no cabe: aparece solo al
+                // final y se va al principio del cierre, para no asomar fuera del cuadro.
+                let alpha = g.alpha * ((lyrics_p - 0.6) / 0.4).clamp(0.0, 1.0);
+                let cy = g.y0 + EXPANDED_COMPACT.1 / 2.0 * s;
                 let room = g.y0 + g.h - 6.0 * s - cy;
+                let x = EXPANDED_COMPACT.0 - COVER_PAD_X + LYRICS_GAP;
+                // Línea fina entre el reproductor y la letra.
+                paint.set_color_rgba8(255, 255, 255, (alpha * 26.0) as u8);
+                fill_rounded_rect(
+                    pixmap,
+                    &paint,
+                    g.x0 + (x - LYRICS_GAP / 2.0 - 0.5) * s,
+                    g.y0 + 14.0 * s,
+                    s,
+                    (EXPANDED_COMPACT.1 - 28.0) * s,
+                    0.5 * s,
+                );
                 Some(LyricsArea {
-                    x: g.x0 + COVER_PAD_X * s,
-                    w: PLAYER_W * s,
+                    x: g.x0 + x * s,
+                    w: (LYRICS_EXTRA - LYRICS_GAP) * s,
                     cy,
-                    half_height: room.clamp(0.0, 46.0 * s),
+                    half_height: room.clamp(0.0, 31.0 * s),
                     lines: li.lines,
                     shift: li.shift,
                     sung: li.sung,
                     status: li.status,
-                    alpha: g.alpha * lyrics_p.clamp(0.0, 1.0),
+                    alpha,
                 })
             }
         })
@@ -1526,7 +1574,7 @@ const BAR_SPEEDS: [(f32, f32); 4] = [(7.1, 3.3), (9.3, 4.7), (6.2, 5.9), (8.4, 2
 /// Barras de audio junto al título en el reproductor. En pausa quedan quietas y bajas.
 fn draw_bars(pixmap: &mut Pixmap, left: f32, cy: f32, s: f32, c: &Controls, t: f32, alpha: f32) {
     let (bar_w, gap) = (3.0 * s, 2.5 * s);
-    let (min_h, max_h) = (3.0 * s, 22.0 * s);
+    let (min_h, max_h) = (3.0 * s, 16.0 * s);
 
     let mut paint = Paint {
         anti_alias: true,
@@ -1573,7 +1621,7 @@ fn draw_button(
     if button == Button::PlayPause {
         let [r, g, b] = color.light();
         paint.set_color_rgba8(r, g, b, (alpha * if hovered { 54.0 } else { 34.0 }) as u8);
-        fill_circle(pixmap, &paint, cx, cy, 19.0 * s);
+        fill_circle(pixmap, &paint, cx, cy, PLAY_RADIUS * s);
     } else if hovered {
         let radius = match button {
             Button::Shuffle | Button::Repeat => MODE_RADIUS,
@@ -1583,6 +1631,8 @@ fn draw_button(
         fill_circle(pixmap, &paint, cx, cy, radius * s);
     }
 
+    // Los íconos, algo más chicos que su círculo: acompañan a la isla baja.
+    let s = s * ICON_SCALE;
     let [r, g, b] = color.light();
     match button {
         Button::Lyrics => {
@@ -1864,6 +1914,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn la_letra_ensancha_la_isla_sin_hacerla_mas_alta() {
+        let lyrics = Shape {
+            lyrics: 1.0,
+            ..Shape::default()
+        };
+        assert_eq!(expanded_size(Shape::default()).1, expanded_size(lyrics).1);
+        assert!(expanded_size(lyrics).0 > expanded_size(Shape::default()).0);
+        let scale = 1.5;
+        let (w, h) = window_size();
+        let (w, h) = ((w * scale).ceil() as u32, (h * scale).ceil() as u32);
+        let mut image = Pixmap::new(w, h).unwrap();
+        let areas = draw(
+            &mut image,
+            scale,
+            1.0,
+            1.0,
+            lyrics,
+            None,
+            Indicators::default(),
+            None,
+            None,
+            None,
+            0.0,
+            None,
+            Some(LyricsInfo {
+                lines: vec![(0, "Verso".into())],
+                shift: 0.0,
+                sung: None,
+                status: None,
+            }),
+            false,
+            crate::settings::IslandColor::default(),
+            crate::workspace::Page::Music,
+        )
+        .unwrap();
+        let g = geometry(w as f32, h as f32, scale, 1.0, 1.0, lyrics);
+        let area = areas.lyrics.unwrap();
+        // A la derecha del reproductor, dentro de la isla y con el mismo margen que él.
+        assert!(area.x >= g.x0 + EXPANDED_COMPACT.0 * scale - COVER_PAD_X * scale);
+        assert!((g.x1() - (area.x + area.w) - COVER_PAD_X * scale).abs() < 0.5);
+        assert!(area.cy - area.half_height >= g.y0 && area.cy + area.half_height <= g.y0 + g.h);
+    }
+
+    #[test]
     fn iconos_de_dispositivo_son_distintos_y_caben_a_distintas_escalas() {
         use crate::battery::DeviceKind;
         let kinds = [
@@ -1987,11 +2081,15 @@ mod tests {
                                 ..Shape::default()
                             },
                         );
-                        let (_, top, size) = g.cover_rect();
                         assert!(x > text.x + text.w, "las barras invaden el título");
+                        assert!(
+                            x >= g.x0 + BARS_X * scale - 1.0,
+                            "las barras invaden el tiempo restante"
+                        );
                         assert!(x < g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X) * scale);
                         assert!(
-                            y >= top && y <= top + size,
+                            y >= g.y0 + (BUTTONS_Y + PLAY_RADIUS) * scale - 1.0
+                                && y < g.y0 + EXPANDED_COMPACT.1 * scale,
                             "las barras invaden los controles"
                         );
                     }
@@ -2170,7 +2268,7 @@ mod tests {
                 let p = step as f32 * 0.05;
                 let g = geometry(w as f32, h as f32, scale, p, 1.0, Shape::default());
                 let mut image = Pixmap::new(w, h).unwrap();
-                draw_indicators(&mut image, &g, p, indicators);
+                draw_indicators(&mut image, &g, p, indicators, Shape::default());
                 for (index, pixel) in image.pixels().iter().enumerate() {
                     if pixel.alpha() == 0 {
                         continue;
@@ -2185,7 +2283,8 @@ mod tests {
                     );
                 }
                 for (battery, hit) in [(true, Hit::Battery), (false, Hit::Update)] {
-                    let (x, y) = indicator_center(&g, p, battery, indicators.update);
+                    let (x, y) =
+                        indicator_center(&g, p, battery, indicators.update, Shape::default());
                     assert!(
                         indicator_hit_test(
                             w as f32,
