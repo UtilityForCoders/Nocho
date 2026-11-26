@@ -17,12 +17,14 @@ const RESTING: (f32, f32, f32) = (88.0, 3.0, 1.5);
 /// Expandida compacta (sin letra): tarjeta flotante con el reproductor.
 pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 156.0, 24.0);
 
-/// Alto lógico que suma la letra sincronizada, debajo de los controles.
-const LYRICS_EXTRA: f32 = 92.0;
+/// Ancho lógico que suma la letra sincronizada, en una columna a la derecha del reproductor.
+const LYRICS_EXTRA: f32 = 260.0;
+/// Margen lógico entre el reproductor y la columna de la letra; en medio va una línea fina.
+const LYRICS_GAP: f32 = 16.0;
 
-/// Expandida con letra sincronizada: el mismo ancho, más alta para los versos.
+/// Expandida con letra sincronizada: el mismo alto, más ancha para los versos.
 pub const EXPANDED_LYRICS: (f32, f32, f32) =
-    (EXPANDED_COMPACT.0, EXPANDED_COMPACT.1 + LYRICS_EXTRA, 24.0);
+    (EXPANDED_COMPACT.0 + LYRICS_EXTRA, EXPANDED_COMPACT.1, 24.0);
 /// Sin nada sonando: una sola fila con el botón de compartir y el aviso.
 pub const EMPTY_MUSIC_HEIGHT: f32 = 56.0;
 
@@ -57,7 +59,7 @@ pub const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
 const BARS_X: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0;
 /// Radio lógico de las esquinas de la carátula.
 const COVER_RADIUS: f32 = 10.0;
-/// Ancho lógico del reproductor (la letra va debajo, con el mismo ancho).
+/// Ancho lógico del reproductor (la letra va a su derecha).
 const PLAYER_W: f32 = EXPANDED_COMPACT.0 - 2.0 * COVER_PAD_X;
 
 /// Barra de progreso: grosor (normal y con mouse encima) y zona de clic.
@@ -80,7 +82,7 @@ const MODE_RADIUS: f32 = 13.0;
 pub fn window_size() -> (f32, f32) {
     (
         EXPANDED_LYRICS.0 * OVERSHOOT + 16.0,
-        TOP_GAP + crate::workspace::SHARE_HEIGHT.max(EXPANDED_LYRICS.1) * OVERSHOOT + 16.0,
+        TOP_GAP + crate::workspace::SHARE_HEIGHT.max(EXPANDED_COMPACT.1) * OVERSHOOT + 16.0,
     )
 }
 
@@ -588,14 +590,14 @@ fn expanded_size(shape: Shape) -> (f32, f32) {
     let n = shape.notice.clamp(-0.1, 1.1);
     let toward_notice = |music: f32, notice: f32| music + (notice - music) * n;
     (
-        toward_notice(EXPANDED_COMPACT.0, NOTICE.0),
+        toward_notice(EXPANDED_COMPACT.0 + LYRICS_EXTRA * lyrics_p, NOTICE.0),
         toward_notice(
             if shape.share {
                 crate::workspace::SHARE_HEIGHT
             } else if shape.empty_music {
                 EMPTY_MUSIC_HEIGHT
             } else {
-                EXPANDED_COMPACT.1 + LYRICS_EXTRA * lyrics_p
+                EXPANDED_COMPACT.1
             },
             NOTICE.1,
         ),
@@ -1014,20 +1016,34 @@ pub fn draw(
             if li.lines.is_empty() && li.status.is_none() {
                 None
             } else {
-                // Debajo de los controles, centrada; mientras la isla crece, el recorte llega
-                // solo hasta su borde inferior.
-                let cy = g.y0 + (EXPANDED_COMPACT.1 + LYRICS_EXTRA / 2.0 - 8.0) * s;
+                // En una columna a la derecha del reproductor, centrada en el alto de la isla.
+                // Mientras la isla se ensancha, la columna todavía no cabe: aparece solo al
+                // final y se va al principio del cierre, para no asomar fuera del cuadro.
+                let alpha = g.alpha * ((lyrics_p - 0.6) / 0.4).clamp(0.0, 1.0);
+                let cy = g.y0 + EXPANDED_COMPACT.1 / 2.0 * s;
                 let room = g.y0 + g.h - 6.0 * s - cy;
+                let x = EXPANDED_COMPACT.0 - COVER_PAD_X + LYRICS_GAP;
+                // Línea fina entre el reproductor y la letra.
+                paint.set_color_rgba8(255, 255, 255, (alpha * 26.0) as u8);
+                fill_rounded_rect(
+                    pixmap,
+                    &paint,
+                    g.x0 + (x - LYRICS_GAP / 2.0 - 0.5) * s,
+                    g.y0 + 22.0 * s,
+                    s,
+                    (EXPANDED_COMPACT.1 - 44.0) * s,
+                    0.5 * s,
+                );
                 Some(LyricsArea {
-                    x: g.x0 + COVER_PAD_X * s,
-                    w: PLAYER_W * s,
+                    x: g.x0 + x * s,
+                    w: (LYRICS_EXTRA - LYRICS_GAP) * s,
                     cy,
-                    half_height: room.clamp(0.0, 46.0 * s),
+                    half_height: room.clamp(0.0, 62.0 * s),
                     lines: li.lines,
                     shift: li.shift,
                     sung: li.sung,
                     status: li.status,
-                    alpha: g.alpha * lyrics_p.clamp(0.0, 1.0),
+                    alpha,
                 })
             }
         })
@@ -1890,6 +1906,50 @@ pub(crate) fn rounded_rect_path(x: f32, y: f32, w: f32, h: f32, r: f32) -> Optio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn la_letra_ensancha_la_isla_sin_hacerla_mas_alta() {
+        let lyrics = Shape {
+            lyrics: 1.0,
+            ..Shape::default()
+        };
+        assert_eq!(expanded_size(Shape::default()).1, expanded_size(lyrics).1);
+        assert!(expanded_size(lyrics).0 > expanded_size(Shape::default()).0);
+        let scale = 1.5;
+        let (w, h) = window_size();
+        let (w, h) = ((w * scale).ceil() as u32, (h * scale).ceil() as u32);
+        let mut image = Pixmap::new(w, h).unwrap();
+        let areas = draw(
+            &mut image,
+            scale,
+            1.0,
+            1.0,
+            lyrics,
+            None,
+            Indicators::default(),
+            None,
+            None,
+            None,
+            0.0,
+            None,
+            Some(LyricsInfo {
+                lines: vec![(0, "Verso".into())],
+                shift: 0.0,
+                sung: None,
+                status: None,
+            }),
+            false,
+            crate::settings::IslandColor::default(),
+            crate::workspace::Page::Music,
+        )
+        .unwrap();
+        let g = geometry(w as f32, h as f32, scale, 1.0, 1.0, lyrics);
+        let area = areas.lyrics.unwrap();
+        // A la derecha del reproductor, dentro de la isla y con el mismo margen que él.
+        assert!(area.x >= g.x0 + EXPANDED_COMPACT.0 * scale - COVER_PAD_X * scale);
+        assert!((g.x1() - (area.x + area.w) - COVER_PAD_X * scale).abs() < 0.5);
+        assert!(area.cy - area.half_height >= g.y0 && area.cy + area.half_height <= g.y0 + g.h);
+    }
 
     #[test]
     fn iconos_de_dispositivo_son_distintos_y_caben_a_distintas_escalas() {
