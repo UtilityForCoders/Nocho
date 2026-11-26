@@ -52,7 +52,7 @@ Requiere Windows 10 (versión 1809 o posterior) u 11, de 64 bits.
 
 Nocho busca la letra sincronizada de la canción y la muestra de dos formas, que puedes activar por separado en **Configuración → Música y letra**:
 
-- **Con la isla abierta**: la letra corre como un carrusel debajo de los controles, resaltando lo que se va cantando.
+- **Con la isla abierta**: la letra corre como un carrusel al costado de los controles, resaltando lo que se va cantando.
 - **Con la línea de reposo**: el verso que se canta aparece flotando bajo la línea, en una píldora negra que no tapa nada (los clics la atraviesan).
 
 Funciona con las apps que informan el avance de la canción, como Spotify. La letra viene de [LRCLIB](https://lrclib.net).
@@ -60,12 +60,12 @@ Funciona con las apps que informan el avance de la canción, como Spotify. La le
 ### Compartir con tus otros equipos
 
 <p align="center">
-  <img src="docs/img/isla-compartir.png" alt="La pestaña Compartir de la isla con el equipo de destino, los botones para elegir archivos y enviar el portapapeles, los mensajes recibidos y la recepción activa" width="362">
+  <img src="docs/img/isla-compartir.png" alt="El panel Compartir de la isla con el equipo de destino, los botones para elegir archivos y enviar el portapapeles, los mensajes recibidos y la recepción activa" width="362">
 </p>
 
 Envía archivos, fotos, texto o lo que tengas copiado a otro PC con Nocho en la misma red, sin cuentas ni nube:
 
-1. Vincula los equipos una sola vez: abre **Compartir** en ambos PCs, elige **Vincular equipo** y confirma que el código coincida en las dos pantallas.
+1. Vincula los equipos una sola vez: abre **Compartir** en ambos PCs (el botón con el ícono de compartir, a la izquierda de los controles de la isla), elige **Vincular equipo** y confirma que el código coincida en las dos pantallas.
 2. Para enviar, **arrastra archivos sobre la isla**, usa **Elegir archivos** o **Enviar portapapeles**.
 3. El texto y las imágenes llegan con una vista previa para copiarlos; los demás archivos piden permiso antes de guardarse en Descargas.
 
