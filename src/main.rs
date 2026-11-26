@@ -4335,13 +4335,14 @@ mod tests {
                 1.0,
                 app.shape(),
             );
-            let (tab_x, tab_y) = workspace::tab_center(workspace::Page::Music);
+            let (tab_x, tab_y) =
+                workspace::tab_center(workspace::Page::Music, bounds.3 / app.scale);
             assert!(
                 app.hit_at(bounds.0 + tab_x * app.scale, bounds.1 + tab_y * app.scale)
                     == Some(Hit::Tab(workspace::Page::Music))
             );
             assert!(
-                app.hit_at(bounds.0 + 70.0 * app.scale, bounds.1 + 120.0 * app.scale)
+                app.hit_at(bounds.0 + 70.0 * app.scale, bounds.1 + 80.0 * app.scale)
                     == Some(Hit::Share(workspace::ShareAction::Files))
             );
             app.battery_visible = true;

@@ -3,8 +3,8 @@
 //! La isla es un cuadro flotante con las cuatro esquinas redondeadas, separada del borde superior
 //! de la pantalla por `TOP_GAP` (sin tocar el techo).
 //! En reposo queda una línea superior; al abrirse muestra directamente el reproductor.
-//! Expandida muestra una tarjeta completa flotante: cabecera con pestañas, reproductor con
-//! carátula, tiempos y controles centrados, y debajo la letra sincronizada si está activa.
+//! Expandida muestra una tarjeta completa flotante, sin cabecera: reproductor con carátula,
+//! tiempos y controles centrados, y debajo la letra sincronizada si está activa.
 
 use tiny_skia::{
     FillRule, FilterQuality, Paint, Path, PathBuilder, Pattern, Pixmap, SpreadMode, Transform,
@@ -14,8 +14,8 @@ use tiny_skia::{
 /// Línea desde la que empieza la animación de apertura.
 const RESTING: (f32, f32, f32) = (88.0, 3.0, 1.5);
 
-/// Expandida compacta (sin letra): tarjeta flotante con cabecera y reproductor.
-pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 194.0, 24.0);
+/// Expandida compacta (sin letra): tarjeta flotante con el reproductor.
+pub const EXPANDED_COMPACT: (f32, f32, f32) = (320.0, 156.0, 24.0);
 
 /// Alto lógico que suma la letra sincronizada, debajo de los controles.
 const LYRICS_EXTRA: f32 = 92.0;
@@ -23,7 +23,8 @@ const LYRICS_EXTRA: f32 = 92.0;
 /// Expandida con letra sincronizada: el mismo ancho, más alta para los versos.
 pub const EXPANDED_LYRICS: (f32, f32, f32) =
     (EXPANDED_COMPACT.0, EXPANDED_COMPACT.1 + LYRICS_EXTRA, 24.0);
-pub const EMPTY_MUSIC_HEIGHT: f32 = 86.0;
+/// Sin nada sonando: una sola fila con el botón de compartir y el aviso.
+pub const EMPTY_MUSIC_HEIGHT: f32 = 56.0;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Shape {
@@ -46,12 +47,12 @@ pub const EXPANDED_CONTENT_START: f32 = 0.45;
 /// Medidas del panel izquierdo de reproducción (píxeles lógicos).
 const COVER_PAD_X: f32 = 20.0;
 /// Margen superior lógico de la carátula dentro del reproductor.
-const COVER_PAD_TOP: f32 = crate::workspace::HEADER_HEIGHT + 8.0;
+const COVER_PAD_TOP: f32 = 16.0;
 /// Lado lógico de la carátula expandida.
 const COVER_SIZE: f32 = 52.0;
 const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 20.0;
 /// Centro vertical lógico de la fila de controles, centrada bajo la barra de progreso.
-const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
+pub const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
 /// Radio lógico de las esquinas de la carátula.
 const COVER_RADIUS: f32 = 10.0;
 /// Ancho lógico del reproductor (la letra va debajo, con el mismo ancho).
@@ -187,9 +188,9 @@ fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool) -> (f32, 
     } else {
         right
     };
-    // Abierta, queda alineado con las pestañas de la cabecera.
-    let header = crate::workspace::header_center_y();
-    (x, g.y0 + ((17.0 + (header - 17.0) * p) * s).min(g.h / 2.0))
+    // Abierta, queda en la esquina superior derecha.
+    let open = 23.0;
+    (x, g.y0 + ((17.0 + (open - 17.0) * p) * s).min(g.h / 2.0))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -845,15 +846,16 @@ pub fn draw(
         });
     }
     if shape.empty_music {
-        let header = crate::workspace::HEADER_HEIGHT;
-        let y = g.y0 + (header + (EMPTY_MUSIC_HEIGHT - header) / 2.0) * s;
-        let alpha = g.alpha * ((g.h / s - header - 10.0) / 12.0).clamp(0.0, 1.0);
+        // Una sola fila: el botón de compartir a la izquierda y el aviso a su lado.
+        let y = g.y0 + EMPTY_MUSIC_HEIGHT / 2.0 * s;
+        let alpha = g.alpha * ((g.h / s - 30.0) / 12.0).clamp(0.0, 1.0);
+        let text_x = crate::workspace::SHARE_BUTTON_CX + 26.0;
         return Some(LayoutAreas {
             labels: vec![LabelArea {
                 text: "Sin reproducción".into(),
-                x: g.x0 + (COVER_PAD_X + 4.0) * s,
+                x: g.x0 + text_x * s,
                 y: y - 10.0 * s,
-                w: (PLAYER_W - 8.0) * s,
+                w: (EXPANDED_COMPACT.0 - COVER_PAD_X - text_x) * s,
                 h: 20.0 * s,
                 alpha,
                 strong: false,
