@@ -90,7 +90,7 @@ Cada release publica además una copia del instalador llamada `notch-isla-setup-
 src/
 ├─ main.rs           ventana, mensajes de Windows, bucle de animación
 ├─ island.rs         geometría y dibujo de la isla, botones e indicadores
-├─ workspace.rs      cabecera de pestañas y panel de Compartir
+├─ workspace.rs      botones para cambiar de página y panel de Compartir
 ├─ spring.rs         física del resorte
 ├─ media.rs          música vía SMTC: sesiones, carátula y órdenes de reproducción
 ├─ appicon.rs        ícono de la app que suena (y el logo propio)
