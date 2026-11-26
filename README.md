@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/img/isla-musica.png" alt="La isla de Nocho abierta con la canción que suena, su carátula, la barra de progreso y los controles" width="362">
+  <img src="docs/img/isla-musica.png" alt="La isla de Nocho abierta en una franja baja con la carátula, el título, los controles y la barra de progreso" width="538">
 </p>
 
 Nocho vive arriba, al centro de la pantalla, como una línea delgada que no estorba. Haz clic en ella y se abre una isla con la canción que suena en cualquier app (Spotify, YouTube en el navegador, Apple Music…), sus controles y su letra. Saca el puntero y vuelve a esconderse sola.
@@ -60,7 +60,7 @@ Funciona con las apps que informan el avance de la canción, como Spotify. La le
 ### Compartir con tus otros equipos
 
 <p align="center">
-  <img src="docs/img/isla-compartir.png" alt="El panel Compartir de la isla con el equipo de destino, los botones para elegir archivos y enviar el portapapeles, los mensajes recibidos y la recepción activa" width="362">
+  <img src="docs/img/isla-compartir.png" alt="El panel Compartir de la isla con el equipo de destino, los botones para elegir archivos y enviar el portapapeles, los mensajes recibidos y la recepción activa" width="538">
 </p>
 
 Envía archivos, fotos, texto o lo que tengas copiado a otro PC con Nocho en la misma red, sin cuentas ni nube:
