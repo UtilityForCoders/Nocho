@@ -58,14 +58,14 @@ const LYRIC_LINE_SPACING: f32 = 1.25;
 /// versos quedaban amontonados.
 const LYRIC_SLOTS: [(f32, f32, f32); 6] = [
     // Sale por arriba.
-    (-56.0, 0.0, 10.0),
-    (-36.0, 0.40, LYRIC_SIZE),
-    // El que se canta: puede ocupar dos renglones.
-    (-17.0, 1.0, LYRIC_BOLD_SIZE),
-    (21.0, 0.35, LYRIC_SIZE),
+    (-48.0, 0.0, 10.0),
+    (-30.0, 0.40, LYRIC_SIZE),
+    // El que se canta: un solo renglón, la isla es una franja baja.
+    (-10.0, 1.0, LYRIC_BOLD_SIZE),
+    (12.0, 0.35, LYRIC_SIZE),
     // Entra por abajo.
-    (40.0, 0.0, 10.5),
-    (56.0, 0.0, 10.0),
+    (31.0, 0.0, 10.5),
+    (48.0, 0.0, 10.0),
 ];
 /// Versos maquetados que se guardan: los seis del carrusel en sus dos formatos, más el aviso.
 const LYRIC_CACHE: usize = 14;
@@ -1163,7 +1163,7 @@ mod tests {
         assert_eq!(lyric_slot(0.0), Some(LYRIC_SLOTS[2]));
         assert_eq!(lyric_slot(1.0), Some(LYRIC_SLOTS[3]));
         let (top, alpha, size) = lyric_slot(0.5).unwrap();
-        assert!((top - 2.0).abs() < 1e-4);
+        assert!((top - 1.0).abs() < 1e-4);
         assert!((alpha - 0.675).abs() < 1e-4);
         assert!((size - (LYRIC_BOLD_SIZE + LYRIC_SIZE) / 2.0).abs() < 1e-4);
         // Fuera de la columna no se dibuja.
