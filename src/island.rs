@@ -72,6 +72,8 @@ const OVERSHOOT: f32 = 1.08;
 
 /// Radio lógico de la zona de clic (y del resaltado) de los botones.
 const BUTTON_RADIUS: f32 = 14.0;
+/// Escala de los íconos del reproductor respecto de su tamaño original.
+const ICON_SCALE: f32 = 0.86;
 /// Radio lógico del círculo (y de la zona de clic) del botón de reproducir.
 const PLAY_RADIUS: f32 = 17.0;
 /// Distancia lógica del centro a los botones de aleatorio y repetir: repetir queda entre
@@ -1629,6 +1631,8 @@ fn draw_button(
         fill_circle(pixmap, &paint, cx, cy, radius * s);
     }
 
+    // Los íconos, algo más chicos que su círculo: acompañan a la isla baja.
+    let s = s * ICON_SCALE;
     let [r, g, b] = color.light();
     match button {
         Button::Lyrics => {

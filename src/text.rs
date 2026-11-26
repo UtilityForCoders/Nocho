@@ -42,6 +42,11 @@ const SCROLL_SPEED: f32 = 30.0;
 /// Pausa en cada extremo, en segundos.
 const SCROLL_PAUSE: f32 = 1.5;
 
+/// Tamaño lógico de letra del título, del artista y de los tiempos del reproductor.
+const TITLE_SIZE: f32 = 13.5;
+const SUBTITLE_SIZE: f32 = 11.0;
+const TIME_SIZE: f32 = 10.5;
+
 /// Tamaño lógico de letra del verso que se canta (negrita) y de los demás.
 const LYRIC_BOLD_SIZE: f32 = 13.5;
 const LYRIC_SIZE: f32 = 11.5;
@@ -131,9 +136,9 @@ impl TextRenderer {
             let wic: IWICImagingFactory =
                 CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
             let dwrite: IDWriteFactory = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)?;
-            let title = make_format(&dwrite, DWRITE_FONT_WEIGHT_SEMI_BOLD, 14.5 * scale)?;
-            let subtitle = make_format(&dwrite, DWRITE_FONT_WEIGHT_REGULAR, 12.0 * scale)?;
-            let time = make_format(&dwrite, DWRITE_FONT_WEIGHT_REGULAR, 11.5 * scale)?;
+            let title = make_format(&dwrite, DWRITE_FONT_WEIGHT_SEMI_BOLD, TITLE_SIZE * scale)?;
+            let subtitle = make_format(&dwrite, DWRITE_FONT_WEIGHT_REGULAR, SUBTITLE_SIZE * scale)?;
+            let time = make_format(&dwrite, DWRITE_FONT_WEIGHT_REGULAR, TIME_SIZE * scale)?;
             let lyric_current = make_carousel_format(&dwrite, scale, true)?;
             let lyric_secondary = make_carousel_format(&dwrite, scale, false)?;
 
@@ -170,9 +175,17 @@ impl TextRenderer {
             return;
         }
         if let (Ok(title), Ok(subtitle), Ok(time), Ok(lyric_current), Ok(lyric_secondary)) = (
-            make_format(&self.dwrite, DWRITE_FONT_WEIGHT_SEMI_BOLD, 14.5 * scale),
-            make_format(&self.dwrite, DWRITE_FONT_WEIGHT_REGULAR, 12.0 * scale),
-            make_format(&self.dwrite, DWRITE_FONT_WEIGHT_REGULAR, 11.5 * scale),
+            make_format(
+                &self.dwrite,
+                DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                TITLE_SIZE * scale,
+            ),
+            make_format(
+                &self.dwrite,
+                DWRITE_FONT_WEIGHT_REGULAR,
+                SUBTITLE_SIZE * scale,
+            ),
+            make_format(&self.dwrite, DWRITE_FONT_WEIGHT_REGULAR, TIME_SIZE * scale),
             make_carousel_format(&self.dwrite, scale, true),
             make_carousel_format(&self.dwrite, scale, false),
         ) {
@@ -364,7 +377,7 @@ impl TextRenderer {
                     brush,
                     line,
                     &areas.text,
-                    areas.text.cy - 19.0 * s,
+                    areas.text.cy - 17.0 * s,
                     20.0 * s,
                     (1.0, 1.0, 1.0),
                     s,

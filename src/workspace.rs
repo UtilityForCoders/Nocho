@@ -268,7 +268,7 @@ pub fn draw(
                         NoticeIcon::Music
                     }
                 };
-                canvas.icon(icon, accent, x + w / 2.0, y + h / 2.0, 0.8);
+                canvas.icon(icon, accent, x + w / 2.0, y + h / 2.0, 0.7);
             }
             Hit::Share(ShareAction::Device) => {
                 canvas.fill(WHITE, if hover { 30.0 } else { 18.0 }, rect, 12.0);
