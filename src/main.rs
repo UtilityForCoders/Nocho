@@ -4358,10 +4358,27 @@ mod tests {
                 windows_cached: false,
                 detail: String::new(),
             });
+            // En Compartir no hay indicadores: su primera fila es el selector de dispositivo.
             assert!(
                 app.hit_at(
                     bounds.0 + bounds.2 - 24.0 * app.scale,
-                    bounds.1 + 14.0 * app.scale
+                    bounds.1 + 31.0 * app.scale
+                ) != Some(Hit::Battery)
+            );
+            // Sin música, la batería va al final de la única fila.
+            app.select_page(workspace::Page::Music);
+            let bounds = island::backdrop_geometry(
+                app.surface.width as f32,
+                app.max_surface_height as f32,
+                app.scale,
+                1.0,
+                1.0,
+                app.shape(),
+            );
+            assert!(
+                app.hit_at(
+                    bounds.0 + bounds.2 - 30.0 * app.scale,
+                    bounds.1 + bounds.3 / 2.0
                 ) == Some(Hit::Battery)
             );
             app.low_battery_devices = app.battery_devices.clone();

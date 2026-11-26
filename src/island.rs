@@ -53,6 +53,8 @@ const COVER_SIZE: f32 = 52.0;
 const PROGRESS_Y: f32 = COVER_PAD_TOP + COVER_SIZE + 20.0;
 /// Centro vertical lógico de la fila de controles, centrada bajo la barra de progreso.
 pub const BUTTONS_Y: f32 = PROGRESS_Y + 36.0;
+/// Borde izquierdo lógico de las barras de audio, en la fila del título.
+const BARS_X: f32 = EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0;
 /// Radio lógico de las esquinas de la carátula.
 const COVER_RADIUS: f32 = 10.0;
 /// Ancho lógico del reproductor (la letra va debajo, con el mismo ancho).
@@ -179,18 +181,36 @@ pub struct Indicators {
     pub hovered: Option<Hit>,
 }
 
-fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool) -> (f32, f32) {
+/// Distancia lógica entre los centros de la batería y la actualización cuando se ven las dos.
+const INDICATOR_GAP: f32 = 26.0;
+
+/// Cuántos indicadores se ven: ocupan lugar en la fila del título.
+fn indicator_count(indicators: Indicators) -> f32 {
+    f32::from(u8::from(indicators.battery) + u8::from(indicators.update))
+}
+
+/// Centro de un indicador. Abierta, la isla no tiene cabecera: en el reproductor van en la fila
+/// del título, a la izquierda de las barras de audio; sin nada sonando, al final de su única
+/// fila. Mientras se abre, se desplazan desde la esquina superior derecha.
+fn indicator_center(g: &Geometry, p: f32, battery: bool, update: bool, shape: Shape) -> (f32, f32) {
     let p = p.clamp(0.0, 1.0);
     let s = g.scale;
-    let right = g.x1() - (14.0 + 14.0 * p) * s;
+    let (open_x, open_y) = if shape.empty_music {
+        (
+            EXPANDED_COMPACT.0 - COVER_PAD_X - 10.0,
+            EMPTY_MUSIC_HEIGHT / 2.0,
+        )
+    } else {
+        (BARS_X - 18.0, COVER_PAD_TOP + COVER_SIZE / 2.0)
+    };
+    // Mientras la isla es angosta queda pegado al borde derecho; al ensancharse llega a su lugar.
+    let right = (g.x0 + open_x * s).min(g.x1() - 14.0 * s);
     let x = if battery && update {
-        right - (22.0 + 6.0 * p) * s
+        right - INDICATOR_GAP * s
     } else {
         right
     };
-    // Abierta, queda en la esquina superior derecha.
-    let open = 23.0;
-    (x, g.y0 + ((17.0 + (open - 17.0) * p) * s).min(g.h / 2.0))
+    (x, g.y0 + ((17.0 + (open_y - 17.0) * p) * s).min(g.h / 2.0))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -206,7 +226,7 @@ pub fn indicator_hit_test(
     y: f32,
 ) -> Option<Hit> {
     let g = geometry(max_w, max_h, scale, p, presence, shape);
-    if presence < 0.9 || g.alpha < 1.0 {
+    if presence < 0.9 || g.alpha < 1.0 || shape.share {
         return None;
     }
     for (shown, hit, battery) in [
@@ -216,7 +236,7 @@ pub fn indicator_hit_test(
         if !shown {
             continue;
         }
-        let (cx, cy) = indicator_center(&g, p, battery, indicators.update);
+        let (cx, cy) = indicator_center(&g, p, battery, indicators.update, shape);
         if (x - cx).abs() <= INDICATOR_HIT_R * scale && (y - cy).abs() <= INDICATOR_HIT_R * scale {
             return Some(hit);
         }
@@ -224,8 +244,15 @@ pub fn indicator_hit_test(
     None
 }
 
-fn draw_indicators(pixmap: &mut Pixmap, g: &Geometry, p: f32, indicators: Indicators) {
-    if g.alpha <= 0.0 {
+/// En Compartir no se dibujan: su primera fila es el selector de dispositivo.
+fn draw_indicators(
+    pixmap: &mut Pixmap,
+    g: &Geometry,
+    p: f32,
+    indicators: Indicators,
+    shape: Shape,
+) {
+    if g.alpha <= 0.0 || shape.share {
         return;
     }
     let mut paint = Paint {
@@ -256,7 +283,7 @@ fn draw_indicators(pixmap: &mut Pixmap, g: &Geometry, p: f32, indicators: Indica
         if !shown {
             continue;
         }
-        let (cx, cy) = indicator_center(g, p, battery, indicators.update);
+        let (cx, cy) = indicator_center(g, p, battery, indicators.update, shape);
         let s = g.scale;
         let [r, green, b] = color;
         paint.set_color_rgba8(
@@ -812,7 +839,7 @@ pub fn draw(
     }
 
     if notice.is_none() {
-        draw_indicators(pixmap, &g, p, indicators);
+        draw_indicators(pixmap, &g, p, indicators, shape);
     }
 
     if g.alpha <= 0.0 {
@@ -855,7 +882,11 @@ pub fn draw(
                 text: "Sin reproducción".into(),
                 x: g.x0 + text_x * s,
                 y: y - 10.0 * s,
-                w: (EXPANDED_COMPACT.0 - COVER_PAD_X - text_x) * s,
+                w: (EXPANDED_COMPACT.0
+                    - COVER_PAD_X
+                    - text_x
+                    - INDICATOR_GAP * indicator_count(indicators))
+                    * s,
                 h: 20.0 * s,
                 alpha,
                 strong: false,
@@ -887,7 +918,7 @@ pub fn draw(
     if let Some(c) = &controls {
         draw_bars(
             pixmap,
-            g.x0 + (EXPANDED_COMPACT.0 - COVER_PAD_X - 22.0) * s,
+            g.x0 + BARS_X * s,
             cover_y + size / 2.0,
             s,
             c,
@@ -953,17 +984,12 @@ pub fn draw(
 
     // Áreas de texto: título/artista
     let (text_x, text_w) = text_column(&g, s);
-    // Espacio de las barras de audio a la derecha del título.
-    let title_inset = 34.0;
+    // Espacio de las barras de audio y de los indicadores a la derecha del título.
+    let title_inset =
+        if controls.is_some() { 34.0 } else { 0.0 } + INDICATOR_GAP * indicator_count(indicators);
     let title_area = TextArea {
         x: text_x,
-        w: (text_w
-            - if controls.is_some() {
-                title_inset * s
-            } else {
-                0.0
-            })
-        .max(0.0),
+        w: (text_w - title_inset * s).max(0.0),
         cy: g.y0 + (COVER_PAD_TOP + COVER_SIZE / 2.0) * s,
         alpha: g.alpha,
     };
@@ -2172,7 +2198,7 @@ mod tests {
                 let p = step as f32 * 0.05;
                 let g = geometry(w as f32, h as f32, scale, p, 1.0, Shape::default());
                 let mut image = Pixmap::new(w, h).unwrap();
-                draw_indicators(&mut image, &g, p, indicators);
+                draw_indicators(&mut image, &g, p, indicators, Shape::default());
                 for (index, pixel) in image.pixels().iter().enumerate() {
                     if pixel.alpha() == 0 {
                         continue;
@@ -2187,7 +2213,8 @@ mod tests {
                     );
                 }
                 for (battery, hit) in [(true, Hit::Battery), (false, Hit::Update)] {
-                    let (x, y) = indicator_center(&g, p, battery, indicators.update);
+                    let (x, y) =
+                        indicator_center(&g, p, battery, indicators.update, Shape::default());
                     assert!(
                         indicator_hit_test(
                             w as f32,
